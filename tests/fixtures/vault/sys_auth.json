@@ -1,0 +1,43 @@
+{
+  "request_id": "8c1f9b2e-4c33-71aa-90d1-52f1aa9c11b0",
+  "lease_id": "",
+  "renewable": false,
+  "lease_duration": 0,
+  "data": {
+    "token/": {
+      "accessor": "auth_token_9f2b71cc",
+      "config": {"default_lease_ttl": 0, "force_no_cache": false, "max_lease_ttl": 0, "token_type": "default-service"},
+      "description": "token based credentials",
+      "external_entropy_access": false,
+      "local": false,
+      "options": null,
+      "running_plugin_version": "v1.17.2+builtin.vault",
+      "seal_wrap": false,
+      "type": "token",
+      "uuid": "a5b6d9c2-11de-8890-3312-fe0c1b22aa41"
+    },
+    "approle/": {
+      "accessor": "auth_approle_5cc918d0",
+      "config": {"default_lease_ttl": 0, "force_no_cache": false, "max_lease_ttl": 0, "token_type": "default-service"},
+      "description": "CI runners authenticate here",
+      "external_entropy_access": false,
+      "local": false,
+      "options": {},
+      "running_plugin_version": "v1.17.2+builtin.vault",
+      "seal_wrap": false,
+      "type": "approle",
+      "uuid": "0d4a1c22-90bb-40ea-a1f2-3c8be0d21c77"
+    }
+  },
+  "wrap_info": null,
+  "warnings": null,
+  "auth": null,
+  "token/": {
+    "accessor": "auth_token_9f2b71cc",
+    "type": "token"
+  },
+  "approle/": {
+    "accessor": "auth_approle_5cc918d0",
+    "type": "approle"
+  }
+}

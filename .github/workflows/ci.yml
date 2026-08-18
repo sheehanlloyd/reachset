@@ -1,0 +1,82 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: reachset
+          POSTGRES_PASSWORD: reachset
+          POSTGRES_DB: reachset
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U reachset"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+      vault:
+        image: hashicorp/vault:1.17
+        env:
+          VAULT_DEV_ROOT_TOKEN_ID: ci-dev-root
+          VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+        ports: ["8200:8200"]
+        volumes:
+          - /tmp/vault-audit:/vault/logs
+        options: >-
+          --cap-add IPC_LOCK
+          --health-cmd "vault status -address=http://127.0.0.1:8200"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+
+    env:
+      REACHSET_TEST_DATABASE_URL: postgresql+asyncpg://reachset:reachset@localhost:5432/reachset
+      REACHSET_TEST_REDIS_URL: redis://localhost:6379/0
+      REACHSET_TEST_VAULT_ADDR: http://localhost:8200
+      REACHSET_TEST_VAULT_TOKEN: ci-dev-root
+      REACHSET_TEST_VAULT_AUDIT_DIR: /tmp/vault-audit
+      REACHSET_TEST_VAULT_AUDIT_MOUNT: /vault/logs
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fix audit dir permissions
+        # The vault container runs as the "vault" user; the runner-created mount
+        # is owned by root. Vault needs write, the test needs read.
+        run: sudo chmod 777 /tmp/vault-audit
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --frozen
+
+      - name: Lint
+        run: make lint
+
+      - name: Typecheck
+        run: make typecheck
+
+      - name: Test (with coverage floor)
+        run: make test
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

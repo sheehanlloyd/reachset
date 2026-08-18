@@ -1,0 +1,29 @@
+[
+  {
+    "id": 7101,
+    "owner": {"login": "mkraft", "id": 501, "type": "User"},
+    "repository_selection": "all",
+    "repositories_url": "https://api.github.com/organizations/9000/personal-access-tokens/7101/repositories",
+    "permissions": {
+      "repository": {"contents": "read", "administration": "read"},
+      "organization": {"members": "read"}
+    },
+    "access_granted_at": "2025-12-01T10:00:00Z",
+    "token_expired": false,
+    "token_expires_at": "2026-12-01T10:00:00Z",
+    "token_last_used_at": "2026-08-16T22:41:00Z"
+  },
+  {
+    "id": 7102,
+    "owner": {"login": "dwu", "id": 503, "type": "User"},
+    "repository_selection": "subset",
+    "repositories_url": "https://api.github.com/organizations/9000/personal-access-tokens/7102/repositories",
+    "permissions": {
+      "repository": {"contents": "write"}
+    },
+    "access_granted_at": "2026-01-20T09:30:00Z",
+    "token_expired": false,
+    "token_expires_at": null,
+    "token_last_used_at": "2026-03-02T11:00:00Z"
+  }
+]

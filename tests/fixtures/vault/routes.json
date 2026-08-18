@@ -1,0 +1,16 @@
+[
+  {"method": "GET", "path": "/v1/sys/auth", "body_file": "sys_auth.json"},
+  {"method": "GET", "path": "/v1/sys/policies/acl", "params": {"list": "true"}, "body_file": "policies_list.json"},
+  {"method": "GET", "path": "/v1/sys/policies/acl/default", "body_file": "policy_default.json"},
+  {"method": "GET", "path": "/v1/sys/policies/acl/ci-deploy", "body_file": "policy_ci_deploy.json"},
+  {"method": "GET", "path": "/v1/sys/policies/acl/admin-sudo", "body_file": "policy_admin_sudo.json"},
+  {"method": "GET", "path": "/v1/sys/policies/acl/agent-scoped", "body_file": "policy_agent_scoped.json"},
+  {"method": "GET", "path": "/v1/auth/token/accessors", "params": {"list": "true"}, "body_file": "accessors_list.json"},
+  {"method": "POST", "path": "/v1/auth/token/lookup-accessor", "json": {"accessor": "acc-ci-deploy-01"}, "body_file": "lookup_ci_deploy.json"},
+  {"method": "POST", "path": "/v1/auth/token/lookup-accessor", "json": {"accessor": "acc-agent-mcp-7"}, "body_file": "lookup_agent_mcp.json"},
+  {"method": "POST", "path": "/v1/auth/token/lookup-accessor", "json": {"accessor": "acc-null-display"}, "body_file": "lookup_null_display.json"},
+  {"method": "POST", "path": "/v1/auth/token/lookup-accessor", "json": {"accessor": "acc-unicode-name"}, "body_file": "lookup_unicode.json"},
+  {"method": "GET", "path": "/v1/secret/metadata", "params": {"list": "true"}, "body_file": "kv_root.json"},
+  {"method": "GET", "path": "/v1/secret/metadata/prod", "params": {"list": "true"}, "body_file": "kv_prod.json"},
+  {"method": "GET", "path": "/v1/secret/metadata/dev", "params": {"list": "true"}, "body_file": "kv_dev.json"}
+]

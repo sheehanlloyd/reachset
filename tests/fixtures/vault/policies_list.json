@@ -1,0 +1,6 @@
+{
+  "request_id": "f1b6a0c4-2d17-9b3e-8899-0a1b2c3d4e5f",
+  "data": {
+    "keys": ["admin-sudo", "agent-scoped", "ci-deploy", "default", "root"]
+  }
+}

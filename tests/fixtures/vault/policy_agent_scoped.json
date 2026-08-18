@@ -1,0 +1,7 @@
+{
+  "request_id": "3d4e5f60-7182-93a4-b5c6-d7e8f9011223",
+  "data": {
+    "name": "agent-scoped",
+    "policy": "# summarizer agent: read-only on the shared corpus, deny on the raw dumps\npath \"secret/data/shared/corpus/*\" {\n  capabilities = [\"read\", \"list\"]\n}\n\npath \"secret/data/shared/raw-dumps/*\" {\n  capabilities = [\"deny\"]\n}\n"
+  }
+}

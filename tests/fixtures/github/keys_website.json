@@ -1,0 +1,12 @@
+[
+  {
+    "id": 9002,
+    "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPLACEHOLDERPUBLICKEYONLY1111111111111",
+    "title": "site-mirror",
+    "read_only": true,
+    "verified": true,
+    "created_at": "2024-08-19T13:00:00Z",
+    "added_by": "dwu",
+    "last_used": "2026-08-17T09:12:00Z"
+  }
+]

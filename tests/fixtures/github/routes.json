@@ -1,0 +1,22 @@
+[
+  {"path": "/orgs/acme/members", "params": {"per_page": 100, "page": 1}, "body_file": "members.json"},
+  {"path": "/users/mkraft", "body_file": "user_mkraft.json"},
+  {"path": "/users/jortega", "body_file": "user_jortega.json"},
+  {"path": "/users/dwu", "body_file": "user_dwu.json"},
+  {"path": "/users/ci-deploy-bot[bot]", "body_file": "user_ci_deploy_bot.json"},
+  {"path": "/orgs/acme/repos", "params": {"per_page": 100, "page": 1}, "body_file": "repos.json"},
+  {"path": "/orgs/acme/installations", "body_file": "installations.json"},
+  {"path": "/app/installations/41/repositories", "body_file": "installation_41_repos.json"},
+  {"path": "/orgs/acme/personal-access-tokens", "params": {"per_page": 100, "page": 1}, "body_file": "pats.json"},
+  {"path": "/orgs/acme/personal-access-tokens/7102/repositories", "params": {"per_page": 100, "page": 1}, "body_file": "pat_7102_repos.json"},
+  {"path": "/repos/acme/prod-infra/keys", "params": {"per_page": 100, "page": 1}, "body_file": "keys_prod_infra.json"},
+  {"path": "/repos/acme/payments-api/keys", "params": {"per_page": 100, "page": 1}, "body": []},
+  {"path": "/repos/acme/website/keys", "params": {"per_page": 100, "page": 1}, "body_file": "keys_website.json"},
+  {"path": "/repos/acme/data-tools/keys", "params": {"per_page": 100, "page": 1}, "body": []},
+  {"path": "/repos/acme/prod-infra/collaborators", "params": {"per_page": 100, "page": 1}, "body_file": "collab_prod_infra.json"},
+  {"path": "/repos/acme/payments-api/collaborators", "params": {"per_page": 100, "page": 1}, "body_file": "collab_payments.json"},
+  {"path": "/repos/acme/website/collaborators", "params": {"per_page": 100, "page": 1}, "body_file": "collab_website.json"},
+  {"path": "/repos/acme/data-tools/collaborators", "params": {"per_page": 100, "page": 1}, "body_file": "collab_data_tools.json"},
+  {"path": "/orgs/acme/audit-log", "params": {"per_page": 100}, "body_file": "audit_page1.json"},
+  {"path": "/orgs/acme/audit-log", "params": {"per_page": 100, "after": "aud-cursor-2"}, "body_file": "audit_page2.json"}
+]

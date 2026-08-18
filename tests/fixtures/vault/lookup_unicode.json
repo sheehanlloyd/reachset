@@ -1,0 +1,23 @@
+{
+  "request_id": "8293a4b5-c6d7-e8f9-0112-233445566778",
+  "data": {
+    "accessor": "acc-unicode-name",
+    "creation_time": 1771052400,
+    "creation_ttl": 0,
+    "display_name": "Renée's déploy-bot 🤖'); DROP TABLE tokens;--",
+    "entity_id": "entity-unicode-01",
+    "expire_time": null,
+    "explicit_max_ttl": 0,
+    "id": "",
+    "issue_time": "2026-02-14T07:00:00Z",
+    "last_renewal_time": "2026-08-11T22:15:09Z",
+    "meta": {"note": "display names are attacker-controlled"},
+    "num_uses": 0,
+    "orphan": false,
+    "path": "auth/approle/login",
+    "policies": ["ci-deploy", "default"],
+    "renewable": true,
+    "ttl": 0,
+    "type": "service"
+  }
+}

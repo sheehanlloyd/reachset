@@ -1,0 +1,12 @@
+[
+  {
+    "id": 9001,
+    "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPLACEHOLDERPUBLICKEYONLY0000000000000",
+    "title": "legacy-deploy@prod",
+    "read_only": false,
+    "verified": true,
+    "created_at": "2023-04-02T08:00:00Z",
+    "added_by": "akapoor",
+    "last_used": "2026-03-11T02:00:00Z"
+  }
+]

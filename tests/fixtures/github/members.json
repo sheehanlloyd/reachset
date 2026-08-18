@@ -1,0 +1,6 @@
+[
+  {"login": "mkraft", "id": 501, "node_id": "MDQ6VXNlcjUwMQ==", "type": "User", "site_admin": false},
+  {"login": "jortega", "id": 502, "node_id": "MDQ6VXNlcjUwMg==", "type": "User", "site_admin": false},
+  {"login": "dwu", "id": 503, "node_id": "MDQ6VXNlcjUwMw==", "type": "User", "site_admin": false},
+  {"login": "ci-deploy-bot[bot]", "id": 601, "node_id": "MDM6Qm90NjAx", "type": "Bot", "site_admin": false}
+]

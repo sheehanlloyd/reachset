@@ -1,0 +1,30 @@
+{
+  "incidents": 48,
+  "labels": {
+    "real": 24,
+    "benign": 24
+  },
+  "pipeline": {
+    "true_positives": 24,
+    "false_positives": 6,
+    "false_negatives": 0,
+    "true_negatives": 18,
+    "needs_review": 6,
+    "precision": 0.8,
+    "recall": 1.0,
+    "mean_cost_units": 5.27,
+    "p95_latency_ms": 0.013
+  },
+  "baseline_rules_only": {
+    "true_positives": 24,
+    "false_positives": 24,
+    "false_negatives": 0,
+    "true_negatives": 0,
+    "needs_review": 0,
+    "precision": 0.5,
+    "recall": 1.0,
+    "mean_cost_units": 0,
+    "p95_latency_ms": 0.0
+  },
+  "cost_note": "cost_units are simulated tool invocations (the roles are deterministic heuristics, not LLM calls); latency is measured wall time of the deterministic pipeline"
+}

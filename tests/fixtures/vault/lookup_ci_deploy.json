@@ -1,0 +1,23 @@
+{
+  "request_id": "5f607182-93a4-b5c6-d7e8-f90112233445",
+  "data": {
+    "accessor": "acc-ci-deploy-01",
+    "creation_time": 1747302400,
+    "creation_ttl": 0,
+    "display_name": "token-ci-deploy",
+    "entity_id": "",
+    "expire_time": null,
+    "explicit_max_ttl": 0,
+    "id": "",
+    "issue_time": "2025-05-15T09:46:40Z",
+    "last_renewal_time": null,
+    "meta": {"pipeline": "deploy-prod"},
+    "num_uses": 0,
+    "orphan": true,
+    "path": "auth/token/create",
+    "policies": ["ci-deploy", "default"],
+    "renewable": false,
+    "ttl": 0,
+    "type": "service"
+  }
+}

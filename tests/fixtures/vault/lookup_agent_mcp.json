@@ -1,0 +1,23 @@
+{
+  "request_id": "60718293-a4b5-c6d7-e8f9-011223344556",
+  "data": {
+    "accessor": "acc-agent-mcp-7",
+    "creation_time": 1731925800,
+    "creation_ttl": 2764800,
+    "display_name": "summarizer-agent-mcp",
+    "entity_id": "entity-9a8b7c6d",
+    "expire_time": "2026-12-18T10:30:00.812345Z",
+    "explicit_max_ttl": 0,
+    "id": "",
+    "issue_time": "2024-11-18T10:30:00.812345Z",
+    "last_renewal_time": "2025-04-02T08:12:44Z",
+    "meta": null,
+    "num_uses": 0,
+    "orphan": false,
+    "path": "auth/approle/login",
+    "policies": ["agent-scoped", "default"],
+    "renewable": true,
+    "ttl": 1520000,
+    "type": "service"
+  }
+}

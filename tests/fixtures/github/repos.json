@@ -1,0 +1,6 @@
+[
+  {"id": 8001, "full_name": "acme/prod-infra", "name": "prod-infra", "private": true, "archived": false, "default_branch": "main"},
+  {"id": 8002, "full_name": "acme/payments-api", "name": "payments-api", "private": true, "archived": false, "default_branch": "main"},
+  {"id": 8003, "full_name": "acme/website", "name": "website", "private": false, "archived": false, "default_branch": "main"},
+  {"id": 8004, "full_name": "acme/data-tools", "name": "data-tools", "private": true, "archived": false, "default_branch": "main"}
+]

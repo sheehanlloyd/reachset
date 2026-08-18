@@ -1,0 +1,7 @@
+{
+  "request_id": "0a9c8b7d-6e5f-4a3b-2c1d-0e9f8a7b6c5d",
+  "data": {
+    "name": "default",
+    "policy": "# Allow tokens to look up their own properties\npath \"auth/token/lookup-self\" {\n    capabilities = [\"read\"]\n}\n\n# Allow tokens to renew themselves\npath \"auth/token/renew-self\" {\n    capabilities = [\"update\"]\n}\n\n# Allow tokens to revoke themselves\npath \"auth/token/revoke-self\" {\n    capabilities = [\"update\"]\n}\n\n# Allow a token to look up its own capabilities on a path\npath \"sys/capabilities-self\" {\n    capabilities = [\"update\"]\n}\n"
+  }
+}

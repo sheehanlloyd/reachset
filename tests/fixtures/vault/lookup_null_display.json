@@ -1,0 +1,23 @@
+{
+  "request_id": "718293a4-b5c6-d7e8-f901-122334455667",
+  "data": {
+    "accessor": "acc-null-display",
+    "creation_time": 1719222000,
+    "creation_ttl": 0,
+    "display_name": null,
+    "entity_id": null,
+    "expire_time": null,
+    "explicit_max_ttl": 0,
+    "id": "",
+    "issue_time": "",
+    "last_renewal_time": null,
+    "meta": null,
+    "num_uses": 0,
+    "orphan": true,
+    "path": "auth/token/create",
+    "policies": ["admin-sudo", "default"],
+    "renewable": false,
+    "ttl": 0,
+    "type": "service"
+  }
+}

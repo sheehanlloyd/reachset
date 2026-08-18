@@ -1,0 +1,4 @@
+[
+  {"login": "mkraft", "id": 501, "type": "User", "role_name": "push", "permissions": {"admin": false, "maintain": false, "push": true, "triage": true, "pull": true}},
+  {"login": "dwu", "id": 503, "type": "User", "role_name": "pull", "permissions": {"admin": false, "maintain": false, "push": false, "triage": false, "pull": true}}
+]

@@ -1,0 +1,7 @@
+{
+  "total_count": 2,
+  "repositories": [
+    {"id": 8001, "full_name": "acme/prod-infra", "private": true},
+    {"id": 8003, "full_name": "acme/website", "private": false}
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "request_id": "1b2c3d4e-5f60-7182-93a4-b5c6d7e8f901",
+  "data": {
+    "name": "ci-deploy",
+    "policy": "# deploy pipeline: read prod app secrets, manage its own scratch space\npath \"secret/data/prod/*\" {\n  capabilities = [\"read\", \"list\"]\n}\n\npath \"secret/data/ci/scratch/+/state\" {\n  capabilities = [\"create\", \"update\", \"delete\"]\n}\n"
+  }
+}
