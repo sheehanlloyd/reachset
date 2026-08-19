@@ -225,3 +225,59 @@ async def test_cross_app_reach_via_deterministic_link(
     steps = [s["step"] for s in edge.path_json]
     assert steps == ["identity_link", "grant"]
     assert edge.path_json[0]["method"] == "email_exact"
+
+
+async def test_audit_page_without_entries_is_rejected() -> None:
+    """A malformed audit page must fail the fetch, not sync zero events and
+    quietly advance the watermark past real data."""
+    with pytest.raises(ValueError, match="audit page missing entries"):
+        audit_page({"after": None})
+
+
+async def test_paged_list_walks_past_a_full_page(tmp_path: Path) -> None:
+    """Classic page-numbered pagination stops on a short page; a full first
+    page has to pull a second one."""
+    import json as _json
+
+    first = [{"login": f"u{i}", "id": i, "type": "User"} for i in range(100)]
+    second = [{"login": "u100", "id": 100, "type": "User"}]
+    (tmp_path / "page1.json").write_text(_json.dumps(first))
+    (tmp_path / "page2.json").write_text(_json.dumps(second))
+    (tmp_path / "routes.json").write_text(
+        _json.dumps(
+            [
+                {
+                    "path": "/orgs/acme/members",
+                    "params": {"per_page": 100, "page": 1},
+                    "body_file": "page1.json",
+                },
+                {
+                    "path": "/orgs/acme/members",
+                    "params": {"per_page": 100, "page": 2},
+                    "body_file": "page2.json",
+                },
+            ]
+        )
+    )
+    connector = GitHubConnector(FixtureTransport(tmp_path), org="acme")
+    members = await connector._paged_list("/orgs/acme/members")
+    assert len(members) == 101
+
+
+async def test_a_page_that_is_not_a_list_is_rejected(tmp_path: Path) -> None:
+    import json as _json
+
+    (tmp_path / "routes.json").write_text(
+        _json.dumps(
+            [
+                {
+                    "path": "/orgs/acme/members",
+                    "params": {"per_page": 100, "page": 1},
+                    "body": {"message": "Not Found"},
+                }
+            ]
+        )
+    )
+    connector = GitHubConnector(FixtureTransport(tmp_path), org="acme")
+    with pytest.raises(ValueError, match="expected list page"):
+        await connector._paged_list("/orgs/acme/members")
