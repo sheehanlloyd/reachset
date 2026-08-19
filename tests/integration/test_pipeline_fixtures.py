@@ -135,3 +135,86 @@ async def test_dangling_audit_actor_becomes_deleted_stub(
         )
     ).scalar_one()
     assert events >= 1
+
+
+async def test_empty_kv_tree_is_not_an_error() -> None:
+    """A fresh Vault answers 404 for a KV mount with no secrets yet; that is an
+    empty inventory, not a failed sync."""
+    import json as _json
+    import tempfile
+    from pathlib import Path as _Path
+
+    with tempfile.TemporaryDirectory() as tmp:
+        directory = _Path(tmp)
+        for name, body in {
+            "sys_auth.json": {"data": {}},
+            "policies.json": {"data": {"keys": []}},
+            "accessors.json": {"data": {"keys": []}},
+        }.items():
+            (directory / name).write_text(_json.dumps(body))
+        (directory / "routes.json").write_text(
+            _json.dumps(
+                [
+                    {"path": "/v1/sys/auth", "body_file": "sys_auth.json"},
+                    {
+                        "path": "/v1/sys/policies/acl",
+                        "params": {"list": "true"},
+                        "body_file": "policies.json",
+                    },
+                    {
+                        "path": "/v1/auth/token/accessors",
+                        "params": {"list": "true"},
+                        "body_file": "accessors.json",
+                    },
+                    {
+                        "path": "/v1/secret/metadata",
+                        "params": {"list": "true"},
+                        "status": 404,
+                        "body": {"errors": []},
+                    },
+                ]
+            )
+        )
+        batch = await VaultConnector(FixtureTransport(directory)).sync()
+
+    assert batch.resources == []
+    assert batch.principals == []
+
+
+async def test_a_non_404_error_while_walking_kv_propagates() -> None:
+    """404 means "no secrets yet"; a 500 means Vault is unhealthy and the sync
+    must fail loudly rather than reporting an empty inventory."""
+    import json as _json
+    import tempfile
+    from pathlib import Path as _Path
+
+    from reachset.connectors.base import TransportHTTPError
+
+    with tempfile.TemporaryDirectory() as tmp:
+        directory = _Path(tmp)
+        (directory / "routes.json").write_text(
+            _json.dumps(
+                [
+                    {"path": "/v1/sys/auth", "body": {"data": {}}},
+                    {
+                        "path": "/v1/sys/policies/acl",
+                        "params": {"list": "true"},
+                        "body": {"data": {"keys": []}},
+                    },
+                    {
+                        "path": "/v1/auth/token/accessors",
+                        "params": {"list": "true"},
+                        "body": {"data": {"keys": []}},
+                    },
+                    {
+                        "path": "/v1/secret/metadata",
+                        "params": {"list": "true"},
+                        "status": 500,
+                        "body": {"errors": ["internal error"]},
+                    },
+                ]
+            )
+        )
+        with pytest.raises(TransportHTTPError) as excinfo:
+            await VaultConnector(FixtureTransport(directory)).sync()
+    assert excinfo.value.status == 500
