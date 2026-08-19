@@ -182,3 +182,125 @@ async def test_chaos_timestamp_skew_both_directions() -> None:
 def test_fault_summary_counts() -> None:
     summary = FaultSummary.from_log(["http_429", "http_429", "conn_reset"])
     assert summary.counts == {"http_429": 2, "conn_reset": 1}
+
+
+async def test_fixture_error_routes_raise_rather_than_return(tmp_path: Path) -> None:
+    """A fixture can stage an error response; it must surface as the same
+    exception a real transport would raise."""
+    (tmp_path / "routes.json").write_text(
+        json.dumps([{"path": "/boom", "status": 503, "body": {}}])
+    )
+    transport = FixtureTransport(tmp_path)
+    with pytest.raises(TransportHTTPError) as excinfo:
+        await transport.get("/boom")
+    assert excinfo.value.status == 503
+
+
+def test_dotted_path_helpers() -> None:
+    from reachset.connectors.transports import _get_path, _set_path
+
+    body = {"a": {"b": [1, 2]}}
+    assert _get_path(body, "a.b") == [1, 2]
+    assert _get_path(body, "a.missing") is None
+    assert _get_path(body, "a.b.c") is None  # traverses into a non-dict
+
+    # _set_path builds intermediate objects rather than raising.
+    target: dict[str, object] = {}
+    _set_path(target, "x.y.z", 7)
+    assert target == {"x": {"y": {"z": 7}}}
+    # and replaces a non-dict standing where an object is needed
+    clobber: dict[str, object] = {"x": "scalar"}
+    _set_path(clobber, "x.y", 1)
+    assert clobber == {"x": {"y": 1}}
+
+
+async def test_timestamp_skew_leaves_unparseable_values_alone() -> None:
+    """Skew must not corrupt a field that only looks like a timestamp."""
+
+    class _JunkTsStub(TransportBase):
+        async def request(self, method, path, params=None, json_body=None):  # type: ignore[no-untyped-def]  # test stub
+            return TransportResponse(
+                status=200,
+                body=json.dumps({"items": [{"created_at": "not-a-date"}], "next": None}).encode(),
+            )
+
+    chaos = ChaosTransport(
+        _JunkTsStub(),
+        seed=1,
+        profile=ChaosProfile(skew_timestamps=1.0, budget=1),
+        page_schema=SCHEMA,
+    )
+    body = (await chaos.request("GET", "/items", {})).json()
+    assert body["items"][0]["created_at"] == "not-a-date"
+
+
+def test_set_path_walks_through_existing_objects() -> None:
+    from reachset.connectors.transports import _set_path
+
+    body: dict[str, object] = {"x": {"y": {"keep": 1}}}
+    _set_path(body, "x.y.z", 2)
+    assert body == {"x": {"y": {"keep": 1, "z": 2}}}
+
+
+async def test_chaos_without_a_page_schema_only_injects_transport_faults() -> None:
+    """Structural page faults need a schema; without one the wrapper still
+    passes bodies through untouched."""
+    chaos = ChaosTransport(_PagedStub(), seed=0, profile=ChaosProfile())
+    body = (await chaos.request("GET", "/items", {})).json()
+    assert [item["id"] for item in body["items"]] == ["a", "b"]
+    assert chaos.fault_log == []
+
+
+async def test_chaos_leaves_non_object_bodies_alone() -> None:
+    """A list-shaped page has no cursor to mangle; it must pass through rather
+    than crash the fault injector."""
+
+    class _ArrayStub(TransportBase):
+        async def request(self, method, path, params=None, json_body=None):  # type: ignore[no-untyped-def]  # test stub
+            return TransportResponse(status=200, body=b"[1, 2, 3]")
+
+    chaos = ChaosTransport(
+        _ArrayStub(), seed=0, profile=ChaosProfile(empty_page=1.0), page_schema=SCHEMA
+    )
+    assert (await chaos.request("GET", "/items", {})).json() == [1, 2, 3]
+
+
+async def test_out_of_order_needs_a_cursor_path_to_reorder_anything() -> None:
+    """With no cursor in the schema there is no next page to fetch ahead, so
+    the fault cannot fire and the page is served unchanged."""
+    schema = PageSchema(items_path="items", cursor_path=None)
+    chaos = ChaosTransport(
+        _PagedStub(), seed=0, profile=ChaosProfile(out_of_order=1.0), page_schema=schema
+    )
+    await chaos.request("GET", "/items", {})
+    body = (await chaos.request("GET", "/items", {"cursor": "c2"})).json()
+    assert "out_of_order" not in chaos.fault_log
+    assert [item["id"] for item in body["items"]] == ["c"]
+
+
+async def test_out_of_order_declines_when_the_page_ahead_is_the_last_one() -> None:
+    """Re-chaining requires a cursor to hang the deferred page on; the final
+    page has none, so the fault backs off instead of losing it."""
+    chaos = ChaosTransport(
+        _PagedStub(),
+        seed=0,
+        profile=ChaosProfile(out_of_order=1.0, budget=50),
+        page_schema=SCHEMA,
+    )
+    # From c2 the page ahead is c3, and c3 is the last page (next is None):
+    # there is no cursor left to re-chain c2 onto, so the fault declines.
+    body = (await chaos.request("GET", "/items", {"cursor": "c2"})).json()
+    assert [item["id"] for item in body["items"]] == ["c"]
+    assert "out_of_order" not in chaos.fault_log
+
+
+async def test_empty_page_fault_without_a_cursor_path_just_empties_the_page() -> None:
+    """Some endpoints are not cursor-paginated at all; the empty-page fault has
+    no cursor to point back at, so it only blanks the items."""
+    schema = PageSchema(items_path="items", cursor_path=None)
+    chaos = ChaosTransport(
+        _PagedStub(), seed=0, profile=ChaosProfile(empty_page=1.0, budget=1), page_schema=schema
+    )
+    body = (await chaos.request("GET", "/items", {})).json()
+    assert body["items"] == []
+    assert body["next"] == "c2"  # untouched, because the schema names no cursor
