@@ -272,3 +272,63 @@ async def test_resume_after_dead_letter_recovers_everything(
     p_set, e_set, p_n, e_n = await _rows(db, tenant)
     assert p_set == EXPECTED_PRINCIPALS and p_n == 6
     assert e_set == EXPECTED_EVENTS and e_n == 6
+
+
+async def test_a_non_object_page_is_treated_as_a_failed_fetch(
+    session_factory: async_sessionmaker[AsyncSession], db: AsyncSession, tenant: str
+) -> None:
+    """An API that answers with a bare array where an object was expected is a
+    protocol violation, not data — retry it, then dead-letter it."""
+
+    class _ArrayStub(TransportBase):
+        async def request(self, method, path, params=None, json_body=None):  # type: ignore[no-untyped-def]  # test stub
+            return TransportResponse(status=200, body=b"[1, 2, 3]")
+
+    syncer, _ = _syncer(session_factory, _ArrayStub())
+    outcome = await syncer.sync_stream(tenant, "chaosapp", SPEC, _extract)
+
+    assert outcome.dead_lettered
+    letter = (
+        (await db.execute(select(DeadLetter).where(DeadLetter.tenant_id == tenant))).scalars().one()
+    )
+    assert letter.payload["reason"] == "retries_exhausted"
+
+
+async def test_an_endless_pagination_loop_terminates(
+    session_factory: async_sessionmaker[AsyncSession], db: AsyncSession, tenant: str
+) -> None:
+    """A cursor that always points at itself would spin forever; the syncer
+    caps repeats and dead-letters instead of hanging the worker."""
+
+    class _LoopStub(TransportBase):
+        async def request(self, method, path, params=None, json_body=None):  # type: ignore[no-untyped-def]  # test stub
+            return TransportResponse(
+                status=200,
+                body=json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "svc-1",
+                                "name": "loop",
+                                "event": "ev-001",
+                                "ts": "2026-07-01T00:00:00Z",
+                            }
+                        ],
+                        "next": "same-cursor-forever",
+                    }
+                ).encode(),
+            )
+
+    syncer, _ = _syncer(session_factory, _LoopStub())
+    outcome = await syncer.sync_stream(tenant, "chaosapp", SPEC, _extract)
+
+    assert outcome.dead_lettered
+    assert outcome.pages <= syncer.max_cursor_repeats + 1
+    letter = (
+        (await db.execute(select(DeadLetter).where(DeadLetter.tenant_id == tenant))).scalars().one()
+    )
+    assert letter.payload["reason"] == "pagination_loop"
+    # The data it did serve is still ingested exactly once.
+    p_set, e_set, p_n, e_n = await _rows(db, tenant)
+    assert p_set == {"svc-1"} and p_n == 1
+    assert e_set == {"ev-001"} and e_n == 1
