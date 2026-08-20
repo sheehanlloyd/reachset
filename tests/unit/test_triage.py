@@ -123,3 +123,47 @@ def test_adjudicate_is_deterministic() -> None:
         suspicious_input_flags=0,
     )
     assert adjudicate(inputs) == adjudicate(inputs)
+
+
+def test_base64_scanner_ignores_undecodable_runs() -> None:
+    """Long alphanumeric runs are common in real display names (hashes, ids);
+    they must not blow up the scanner or trip it."""
+    from reachset.triage.sanitize import looks_injected
+
+    assert looks_injected("svc " + "A" * 40) is False
+    assert looks_injected("deploy-key-" + "z" * 64) is False
+
+
+def test_pipeline_can_miss_a_real_incident_and_the_eval_counts_it() -> None:
+    """A benign-looking true positive is scored as a false negative, not
+    quietly dropped — otherwise recall would be flattering."""
+    from reachset.triage.evalharness import LabeledIncident, evaluate
+
+    incident = LabeledIncident(
+        context=_context(
+            incident_id="fn-1",
+            severity="medium",
+            periodicity_score=0.95,  # looks like a cron job
+            privileged_edges=0,
+            idle_days=None,
+        ),
+        is_real=True,
+        scenario="stealthy-real-incident",
+    )
+    report = evaluate([incident])
+    assert report["pipeline"]["false_negatives"] == 1
+    assert report["pipeline"]["recall"] == 0.0
+
+
+def test_untrusted_passes_none_through() -> None:
+    """A null display name stays null rather than becoming the string "None"
+    in an agent's context."""
+    from reachset.triage.sanitize import untrusted
+
+    assert untrusted(None, "app_profile") is None
+    assert untrusted("", "app_profile") == {
+        "untrusted": True,
+        "provenance": "app_profile",
+        "text": "",
+        "suspicious": False,
+    }

@@ -116,3 +116,59 @@ async def test_generation_is_timestamp_bounded(db: AsyncSession, tenant: str) ->
         )
     ).scalar_one()
     assert resources == 50  # floor kicks in below principals // 2
+
+
+async def test_generator_cli_entry_point(
+    migrated_pg_url: str, pg_engine: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`make seed` runs this; if the argument wiring breaks, the demo path
+    breaks with it."""
+    import asyncio
+
+    from sqlalchemy import create_engine
+
+    from reachset.synth.generator import _main
+
+    monkeypatch.setenv("REACHSET_DATABASE_URL", migrated_pg_url)
+    monkeypatch.setenv("REACHSET_LOG_LEVEL", "CRITICAL")
+    tenant = "synth-cli-demo"
+
+    await asyncio.to_thread(
+        lambda: asyncio.run(
+            _main(
+                [
+                    "--tenant",
+                    tenant,
+                    "--principals",
+                    "20",
+                    "--grants",
+                    "40",
+                    "--events",
+                    "100",
+                    "--seed",
+                    "5",
+                ]
+            )
+        )
+    )
+
+    sync_engine = create_engine(migrated_pg_url.replace("+asyncpg", "+psycopg"))
+    try:
+        with sync_engine.begin() as conn:
+            counts = {
+                table: conn.execute(
+                    text(f"SELECT COUNT(*) FROM {table} WHERE tenant_id = :t"),
+                    {"t": tenant},
+                ).scalar_one()
+                for table in ("principals", "grants", "events")
+            }
+            conn.execute(text("DELETE FROM events WHERE tenant_id = :t"), {"t": tenant})
+            for table in ("grants", "resources", "principals"):
+                conn.execute(
+                    text(f"DELETE FROM {table} WHERE tenant_id = :t"),
+                    {"t": tenant},
+                )
+    finally:
+        sync_engine.dispose()
+
+    assert counts == {"principals": 20, "grants": 40, "events": 100}
