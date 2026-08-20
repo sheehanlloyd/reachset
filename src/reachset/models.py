@@ -168,6 +168,8 @@ class Grant(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "dedupe_key", name="uq_grant_dedupe"),
         Index("ix_grants_principal", "principal_id"),
+        Index("ix_grants_granted_by", "granted_by_principal_id"),
+        Index("ix_grants_credential", "credential_id"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -217,6 +219,7 @@ class Event(Base):
         UniqueConstraint("tenant_id", "app_id", "raw_ref", name="uq_event_identity"),
         Index("ix_events_actor_ts", "actor_principal_id", "ts"),
         Index("ix_events_tenant_ts", "tenant_id", "ts"),
+        Index("ix_events_target_resource", "target_resource_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -240,6 +243,9 @@ class IdentityLink(Base):
     __tablename__ = "identity_links"
     __table_args__ = (
         UniqueConstraint("principal_a", "principal_b", "method", name="uq_link_identity"),
+        # principal_a is covered by the unique constraint's leading column;
+        # principal_b needs its own index for the FK cascade.
+        Index("ix_identity_links_principal_b", "principal_b"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -258,6 +264,11 @@ class ReachEdge(Base):
             "tenant_id", "principal_id", "resource_id", "capability", name="uq_reach_edge"
         ),
         Index("ix_reach_edges_resource", "resource_id"),
+        # uq_reach_edge leads with tenant_id, so it cannot serve a lookup by
+        # principal alone — which is exactly what the FK cascade does when a
+        # principal is deleted. Without this, deleting one principal sequentially
+        # scans the whole edge table.
+        Index("ix_reach_edges_principal", "principal_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
