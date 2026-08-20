@@ -45,7 +45,7 @@ class TransportResponse:
             raise ValueError(f"undecodable response body: {exc}") from exc
 
 
-class Transport(Protocol):
+class Transport(Protocol):  # pragma: no cover - structural declaration, never executed
     async def request(
         self,
         method: str,

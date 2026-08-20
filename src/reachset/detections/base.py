@@ -29,7 +29,7 @@ class Finding:
         }
 
 
-class Detection(Protocol):
+class Detection(Protocol):  # pragma: no cover - structural declaration, never executed
     rule_id: str
 
     async def run(
