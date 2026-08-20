@@ -88,3 +88,20 @@ def test_sudo_includes_impersonate() -> None:
 def test_tables_are_versioned() -> None:
     for app in ("vault", "github"):
         assert registry.table_for(app).version
+
+
+def test_prefix_rules_match_by_prefix() -> None:
+    """Exact entries cover every scope our connectors emit today; the prefix
+    mechanism exists for apps whose scope strings are open-ended."""
+    table = registry.ScopeTable(
+        app_id="demo",
+        version="test",
+        exact={"exact:thing": frozenset({Capability.READ})},
+        prefixes={"custom.": frozenset({Capability.READ, Capability.WRITE})},
+    )
+    assert table.capabilities_for("exact:thing") == frozenset({Capability.READ})
+    assert table.capabilities_for("custom.anything") == frozenset(
+        {Capability.READ, Capability.WRITE}
+    )
+    with pytest.raises(registry.UnknownScopeError):
+        table.capabilities_for("unmatched.scope")

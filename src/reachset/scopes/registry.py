@@ -25,7 +25,10 @@ class UnknownScopeError(Exception):
 class ScopeTable:
     app_id: str
     version: str
-    # scope string -> capability set. Prefix rules end with "*".
+    # scope string -> capability set. `prefixes` keys are bare prefixes
+    # (e.g. "custom.") matched with str.startswith, no trailing "*" — neither
+    # table below uses one yet, but the shape is here for an app whose scopes
+    # are namespaced rather than an enumerable flat list.
     exact: dict[str, frozenset[Capability]]
     prefixes: dict[str, frozenset[Capability]]
 
