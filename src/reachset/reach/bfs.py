@@ -7,6 +7,7 @@ Correct before fast; this file is the "correct".
 """
 
 import uuid
+from collections.abc import Collection
 from dataclasses import dataclass, field
 
 from reachset.reach.selectors import (
@@ -31,12 +32,15 @@ class GraphGrant:
     resource_selector: str
     capabilities: frozenset[str]
     scope_raw: str = ""
+    # The app that issued this grant. A grant never reaches outside it.
+    source_app_id: str = "synth"
 
 
 @dataclass(frozen=True)
 class GraphResource:
     id: uuid.UUID
     path: str
+    app_id: str = "synth"
 
 
 @dataclass(frozen=True)
@@ -70,10 +74,14 @@ def compute_reach_bfs(
     origin: uuid.UUID | None = None,
     depth_cap: int = 8,
     include_fuzzy: bool = False,
+    exclude_grant_ids: Collection[uuid.UUID] = (),
 ) -> dict[tuple[uuid.UUID, uuid.UUID, str], BfsEdge]:
     """Best edge per (origin, resource, capability), enumerating simple paths."""
+    excluded = frozenset(exclude_grant_ids)
     by_principal: dict[uuid.UUID, list[GraphGrant]] = {}
     for grant in graph.grants:
+        if grant.id in excluded:
+            continue
         by_principal.setdefault(grant.principal_id, []).append(grant)
     principals_by_id = {p.id: p for p in graph.principals}
 
@@ -94,6 +102,8 @@ def compute_reach_bfs(
                 effective = min(confidence, 0.6) if has_fuzzy else confidence
                 for capability in grant.capabilities - {"impersonate"}:
                     for resource in graph.resources:
+                        if resource.app_id != grant.source_app_id:
+                            continue
                         if not glob_match(grant.resource_selector, resource.path):
                             continue
                         key = (start.id, resource.id, capability)

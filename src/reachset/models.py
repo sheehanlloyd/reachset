@@ -109,6 +109,13 @@ class Principal(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "app_id", "external_id", name="uq_principal_identity"),
         Index("ix_principals_tenant_kind", "tenant_id", "kind"),
+        # Impersonation matches principal external_id across every app in the
+        # tenant (identity, not source app), so the identity-tuple unique
+        # constraint above — which leads with app_id before external_id —
+        # can't serve that lookup. This index is what makes the reach
+        # engine's exact-selector impersonation join an index lookup instead
+        # of a sequential scan; see reach/engine.py.
+        Index("ix_principals_tenant_external_id", "tenant_id", "external_id"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
