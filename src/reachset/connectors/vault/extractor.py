@@ -78,9 +78,10 @@ def parse_policy_document(name: str, hcl: str) -> list[tuple[str, frozenset[Capa
         caps: set[Capability] = set()
         for scope in scope_strings:
             caps |= capabilities_for("vault", scope)
-        # Vault's `+` matches exactly one path segment; our selector language has
-        # only `*`/`?`, so `+` widens to `*` (documented in NOTES.md).
-        selector = match.group("path").replace("+", "*")
+        # Vault's `+` matches exactly one path segment; our selector language
+        # has the same operator with the same meaning (reach/selectors.py), so
+        # the policy's own selector text is stored verbatim.
+        selector = match.group("path")
         rules.append((selector, frozenset(caps)))
     return rules
 

@@ -30,9 +30,9 @@ def policy_rules() -> dict[str, list[tuple[str, frozenset[Capability]]]]:
 def test_policy_parsing_capabilities(policy_rules: dict) -> None:  # type: ignore[type-arg]
     ci = dict(policy_rules["ci-deploy"])
     assert ci["secret/data/prod/*"] == frozenset({Capability.READ})
-    # Vault's `+` single-segment wildcard widens to `*` in our selector language
-    assert "secret/data/ci/scratch/*/state" in ci
-    assert Capability.DELETE in ci["secret/data/ci/scratch/*/state"]
+    # Vault's `+` single-segment wildcard is stored verbatim, not widened.
+    assert "secret/data/ci/scratch/+/state" in ci
+    assert Capability.DELETE in ci["secret/data/ci/scratch/+/state"]
 
     # deny paths are dropped, not mapped
     agent = dict(policy_rules["agent-scoped"])
@@ -151,3 +151,85 @@ def test_parse_ts_rejects_garbage() -> None:
     assert extractor._parse_ts(None) is None
     assert extractor._parse_ts("") is None
     assert extractor._parse_ts(0) is None
+
+
+# --- malformed-payload paths -------------------------------------------------
+
+
+def test_policy_list_without_keys_is_rejected() -> None:
+    with pytest.raises(ValueError, match=r"missing data\.keys"):
+        extractor.extract_policies({"data": {}}, {})
+
+
+def test_policy_listed_without_a_document_is_rejected() -> None:
+    """Vault listed a policy we never fetched: proceeding would silently drop
+    whatever that policy grants."""
+    with pytest.raises(ValueError, match="listed but no document supplied"):
+        extractor.extract_policies({"data": {"keys": ["ghost"]}}, {})
+
+
+def test_auth_payload_without_data_is_rejected() -> None:
+    with pytest.raises(ValueError, match="sys/auth payload missing data"):
+        extractor.extract_auth_methods({"request_id": "x"})
+
+
+def test_auth_payload_ignores_non_mount_metadata_keys() -> None:
+    """Vault mixes request metadata in alongside the mounts; only entries that
+    look like mounts (they carry a type) are resources."""
+    records = extractor.extract_auth_methods(
+        {"data": {"token/": {"type": "token"}, "request_id": "not-a-mount"}}
+    )
+    assert [r.path for r in records] == ["auth/token"]
+
+
+def test_lookup_payload_without_data_is_rejected() -> None:
+    with pytest.raises(ValueError, match="missing data"):
+        extractor.extract_token("acc-x", {"request_id": "y"}, {})
+
+
+def test_token_without_a_policies_list_is_rejected() -> None:
+    with pytest.raises(ValueError, match="has no policies list"):
+        extractor.extract_token("acc-x", {"data": {"accessor": "acc-x"}}, {})
+
+
+def test_policy_granting_nothing_produces_no_grant() -> None:
+    """A deny-only policy is real and must not become a phantom grant."""
+    _, _, grants = extractor.extract_token(
+        "acc-x",
+        {"data": {"accessor": "acc-x", "policies": ["deny-only"], "creation_time": 0}},
+        {"deny-only": [("secret/*", frozenset())]},
+    )
+    assert grants == []
+
+
+def test_accessor_list_without_keys_is_rejected() -> None:
+    with pytest.raises(ValueError, match=r"token accessors payload missing data\.keys"):
+        extractor.extract_accessor_list({"data": {}})
+
+
+def test_accessor_list_skips_non_string_entries() -> None:
+    assert extractor.extract_accessor_list({"data": {"keys": ["ok", 42, None]}}) == ["ok"]
+
+
+def test_audit_entry_without_a_time_is_rejected() -> None:
+    with pytest.raises(ValueError, match="audit entry missing time"):
+        extractor.extract_audit_events(['{"type": "response", "request": {"path": "x"}}'])
+
+
+def test_audit_skips_blank_lines() -> None:
+    lines = (FIXTURES / "audit_sample.jsonl").read_text().splitlines()
+    assert extractor.extract_audit_events([*lines, "", "   "]) == extractor.extract_audit_events(
+        lines
+    )
+
+
+def test_sys_and_auth_paths_are_top_sensitivity() -> None:
+    records = extractor.extract_secret_paths(["sys/policies/acl", "auth/token/create"])
+    assert {r.sensitivity for r in records} == {3}
+
+
+def test_timestamp_of_an_unexpected_type_is_rejected() -> None:
+    """A list where a timestamp belongs means the payload shape changed; that
+    is worth failing on rather than coercing."""
+    with pytest.raises(ValueError, match="unparseable vault timestamp"):
+        extractor._parse_ts(["2026-01-01"])
