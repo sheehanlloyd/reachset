@@ -27,14 +27,40 @@ pytestmark = pytest.mark.integration
 
 N_PRINCIPALS = 5
 
+APPS = st.sampled_from(["vault", "github"])
 RESOURCE_PATHS = st.sampled_from(
-    ["a/b", "a/c", "b/x", "a/b/c", "z", "a_b", "a%b", "π/prod", "a/b\nc"]
+    ["a/b", "a/c", "b/x", "a/b/c", "z", "a_b", "a%b", "π/prod", "a/b\nc", "a/", "a"]
 )
 SELECTORS = st.sampled_from(
-    ["*", "a/*", "a/?", "a/b", "b/x", "?/*", "a*", "z", "a_b", "a%b", "π/*", "nomatch/*"]
+    [
+        "*",
+        "a/*",
+        "a/?",
+        "a/b",
+        "b/x",
+        "?/*",
+        "a*",
+        "z",
+        "a_b",
+        "a%b",
+        "π/*",
+        "nomatch/*",
+        # `+` matches exactly one non-empty segment: "a/+" should hit "a/b" and
+        # "a/c" but not "a/b/c" (too many segments) or "a/" (empty segment).
+        "a/+",
+        "a/+/c",
+        "π/+",
+    ]
 )
 PRINCIPAL_SELECTORS = st.sampled_from(
-    ["principal:p0", "principal:p1", "principal:p*", "principal:p?", "principal:nobody"]
+    [
+        "principal:p0",
+        "principal:p1",
+        "principal:p*",
+        "principal:p?",
+        "principal:p+",
+        "principal:nobody",
+    ]
 )
 CAPS = st.frozensets(
     st.sampled_from([c.value for c in Capability if c is not Capability.IMPERSONATE]),
@@ -51,7 +77,7 @@ def graphs(draw: st.DrawFn) -> Graph:
     n_principals = draw(st.integers(2, N_PRINCIPALS))
     principals = [GraphPrincipal(id=uuid.uuid4(), external_id=f"p{i}") for i in range(n_principals)]
     resources = [
-        GraphResource(id=uuid.uuid4(), path=path)
+        GraphResource(id=uuid.uuid4(), path=path, app_id=draw(APPS))
         for path in draw(st.lists(RESOURCE_PATHS, min_size=1, max_size=4, unique=True))
     ]
     grants = []
@@ -66,6 +92,7 @@ def graphs(draw: st.DrawFn) -> Graph:
                     resource_selector=draw(SELECTORS),
                     capabilities=draw(CAPS),
                     scope_raw=f"s{i}",
+                    source_app_id=draw(APPS),
                 )
             )
         else:
@@ -76,6 +103,7 @@ def graphs(draw: st.DrawFn) -> Graph:
                     resource_selector=draw(PRINCIPAL_SELECTORS),
                     capabilities=frozenset({"impersonate"}),
                     scope_raw=f"s{i}",
+                    source_app_id=draw(APPS),
                 )
             )
     links = []
@@ -113,16 +141,22 @@ async def _load_graph(db: AsyncSession, tenant: str, graph: Graph) -> None:
         await db.execute(
             text(
                 "INSERT INTO resources (id, tenant_id, app_id, external_id, kind, path, "
-                "sensitivity) VALUES (:id, :tenant, 'synth', :ext, 'secret_path', :path, 1)"
+                "sensitivity) VALUES (:id, :tenant, :app, :ext, 'secret_path', :path, 1)"
             ),
-            {"id": r.id, "tenant": tenant, "ext": f"res-{r.id}", "path": r.path},
+            {
+                "id": r.id,
+                "tenant": tenant,
+                "app": r.app_id,
+                "ext": f"res-{r.id}",
+                "path": r.path,
+            },
         )
     for g in graph.grants:
         await db.execute(
             text(
                 "INSERT INTO grants (id, tenant_id, principal_id, resource_selector, "
                 "scope_raw, capabilities, source_app_id, dedupe_key) "
-                "VALUES (:id, :tenant, :pid, :selector, :scope, :caps, 'synth', :key)"
+                "VALUES (:id, :tenant, :pid, :selector, :scope, :caps, :app, :key)"
             ),
             {
                 "id": g.id,
@@ -131,6 +165,7 @@ async def _load_graph(db: AsyncSession, tenant: str, graph: Graph) -> None:
                 "selector": g.resource_selector,
                 "scope": g.scope_raw,
                 "caps": sorted(g.capabilities),
+                "app": g.source_app_id,
                 "key": str(g.id),
             },
         )
