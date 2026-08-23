@@ -23,7 +23,7 @@ from reachset.connectors.base import (
 )
 from reachset.ingest import dead_letter, watermarks
 from reachset.ingest.pipeline import upsert_batch
-from reachset.ingest.ratelimit import BackoffPolicy, BucketRegistry, Sleeper
+from reachset.ingest.ratelimit import BackoffPolicy, BucketSource, Sleeper
 from reachset.logging import get_logger
 from reachset.records import ExtractBatch
 
@@ -52,7 +52,7 @@ class StreamOutcome:
 class StreamSyncer:
     session_factory: async_sessionmaker[AsyncSession]
     transport: Transport
-    limiter: BucketRegistry
+    limiter: BucketSource
     backoff: BackoffPolicy = field(default_factory=BackoffPolicy)
     sleeper: Sleeper = asyncio.sleep
     rng: random.Random = field(default_factory=lambda: random.Random())
