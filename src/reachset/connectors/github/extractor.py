@@ -49,9 +49,11 @@ def extract_members(payload: list[dict[str, Any]]) -> list[PrincipalRecord]:
     for user in payload:
         if "login" not in user:
             raise ValueError(f"member entry without login: {json.dumps(user)[:120]}")
+        if "id" not in user:
+            raise ValueError(f"member {user['login']!r} without id")
         records.append(
             PrincipalRecord(
-                external_id=f"user:{user['id']}" if "id" in user else f"user:{user['login']}",
+                external_id=f"user:{user['id']}",
                 kind=_user_kind(user),
                 display_name=user.get("name") or user["login"],
                 email=user.get("email") or None,
