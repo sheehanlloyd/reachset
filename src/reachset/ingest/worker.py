@@ -52,11 +52,23 @@ async def handle_job(
     syncer: Syncer,
 ) -> bool:
     """Run one job to completion. Returns True on success. All failure paths
-    leave a dead letter and a bumped failure counter behind."""
+    leave a dead letter and a bumped failure counter behind — including a
+    failure after the sync itself succeeds (a bad upsert, a materialize
+    error), not just a failed fetch. Both must be caught the same way, or a
+    DB-side failure on an otherwise-good batch would crash the loop instead
+    of dead-lettering the job.
+    """
     tenant_id = job["tenant_id"]
     app_id = job["app_id"]
     try:
         batch = await syncer(tenant_id, app_id)
+        async with session_factory() as session:
+            stats = await upsert_batch(session, tenant_id, app_id, batch)
+            await watermarks.advance(
+                session, tenant_id, app_id, "full", datetime.now(UTC).isoformat()
+            )
+            edges = await materialize(session, tenant_id)
+            await session.commit()
     except Exception as exc:
         log.warning("sync_failed", tenant=tenant_id, app=app_id, error=str(exc))
         async with session_factory() as session:
@@ -67,11 +79,6 @@ async def handle_job(
             await session.commit()
         return False
 
-    async with session_factory() as session:
-        stats = await upsert_batch(session, tenant_id, app_id, batch)
-        await watermarks.advance(session, tenant_id, app_id, "full", datetime.now(UTC).isoformat())
-        edges = await materialize(session, tenant_id)
-        await session.commit()
     log.info("job_done", tenant=tenant_id, app=app_id, reach_edges=edges, **stats.as_dict())
     return True
 
