@@ -11,6 +11,7 @@ from reachset.detections.off_hours import OffHoursBulkRead
 from reachset.detections.orphaned_grant import OrphanedGrant
 from reachset.detections.scope_expansion import ScopeExpansion
 from reachset.detections.shadow_ai import ShadowAIIntegration
+from reachset.observability import FINDINGS
 
 ALL_DETECTIONS: tuple[Detection, ...] = (
     CrossAppConcentration(),
@@ -25,5 +26,8 @@ ALL_DETECTIONS: tuple[Detection, ...] = (
 async def run_all(session: AsyncSession, tenant_id: str, *, now: datetime) -> list[Finding]:
     findings: list[Finding] = []
     for detection in ALL_DETECTIONS:
-        findings.extend(await detection.run(session, tenant_id, now=now))
+        produced = await detection.run(session, tenant_id, now=now)
+        for finding in produced:
+            FINDINGS.inc(rule=finding.rule_id, severity=finding.severity)
+        findings.extend(produced)
     return findings

@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from reachset.models import DeadLetter
+from reachset.observability import DEAD_LETTERS
 
 
 async def bury(
@@ -18,6 +19,7 @@ async def bury(
     error: str,
     attempts: int,
 ) -> None:
+    DEAD_LETTERS.inc(app=app_id, stream=stream)
     await session.execute(
         insert(DeadLetter).values(
             tenant_id=tenant_id,

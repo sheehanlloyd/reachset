@@ -6,10 +6,10 @@ row. That property is what the chaos tests pin down.
 """
 
 import hashlib
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -25,6 +25,7 @@ from reachset.models import (
     Provenance,
     Resource,
 )
+from reachset.observability import INGEST_DURATION, INGEST_RECORDS
 from reachset.records import ExtractBatch, GrantRecord
 
 
@@ -92,6 +93,7 @@ async def upsert_batch(
 ) -> UpsertStats:
     """Upsert one extracted page. Caller owns the transaction: commit together
     with the watermark advance or not at all."""
+    started = time.perf_counter()
     now = datetime.now(UTC)
 
     for record in batch.principals:
@@ -300,7 +302,7 @@ async def upsert_batch(
         else:
             inserted += 1
 
-    return UpsertStats(
+    stats = UpsertStats(
         principals=len(batch.principals),
         credentials=len(batch.credentials),
         resources=len(batch.resources),
@@ -308,7 +310,8 @@ async def upsert_batch(
         events_inserted=inserted,
         events_skipped=skipped,
     )
-
-
-def summarize(stats: UpsertStats) -> dict[str, Any]:
-    return stats.as_dict()
+    INGEST_DURATION.observe(time.perf_counter() - started, app=app_id)
+    for record_type, count in stats.as_dict().items():
+        if count:
+            INGEST_RECORDS.inc(count, tenant=tenant_id, app=app_id, record_type=record_type)
+    return stats
