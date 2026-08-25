@@ -82,14 +82,20 @@ async def test_reach_endpoint_orders_by_sensitivity(
     )
     await db.commit()
 
-    resp = await client.get(f"/principals/{p.id}/reach")
+    resp = await client.get(f"/tenants/{tenant}/principals/{p.id}/reach")
     assert resp.status_code == 200
     body = resp.json()
     assert body["principal"]["external_id"] == "svc-1"
     assert [r["resource"] for r in body["reach"]] == ["secret/prod/db", "secret/dev/foo"]
     assert body["reach"][0]["capability"] == "write"
 
-    resp = await client.get("/principals/00000000-0000-0000-0000-000000000000/reach")
+    resp = await client.get(
+        f"/tenants/{tenant}/principals/00000000-0000-0000-0000-000000000000/reach"
+    )
+    assert resp.status_code == 404
+
+    # the same principal under a different tenant is a 404, not a leak
+    resp = await client.get(f"/tenants/other-tenant/principals/{p.id}/reach")
     assert resp.status_code == 404
 
 
