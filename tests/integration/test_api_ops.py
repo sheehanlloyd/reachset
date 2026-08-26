@@ -1,4 +1,4 @@
-"""Operational endpoints added on top of the API."""
+"""Operational endpoints and the analysis routes added on top of the API."""
 
 import uuid
 from collections.abc import AsyncIterator
@@ -147,6 +147,47 @@ async def test_request_metrics_use_route_templates_not_paths(
     metrics = (await client.get("/metrics")).text
     assert f'route="{route}"' in metrics
     assert str(principal.id) not in metrics
+
+
+async def test_principal_blast_radius_endpoint(
+    db: AsyncSession, client: AsyncClient, tenant: str
+) -> None:
+    principal = await _seed(db, tenant)
+    resp = await client.get(f"/tenants/{tenant}/blast-radius/{principal.id}")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["summary"]["resources"] == 1
+    assert body["summary"]["writable_sensitive_resources"] == 1
+    assert body["top_resources"][0]["resource"] == "secret/data/prod/db"
+
+    missing = await client.get(f"/tenants/{tenant}/blast-radius/{uuid.uuid4()}")
+    assert missing.status_code == 404
+
+
+async def test_credential_blast_radius_endpoint(
+    db: AsyncSession, client: AsyncClient, tenant: str
+) -> None:
+    await _seed(db, tenant)
+    resp = await client.get(f"/tenants/{tenant}/credentials/acc-api/blast-radius")
+    assert resp.status_code == 200
+    assert resp.json()["subject"]["type"] == "credential"
+
+    missing = await client.get(f"/tenants/{tenant}/credentials/acc-nope/blast-radius")
+    assert missing.status_code == 404
+
+
+async def test_recommendations_endpoint(db: AsyncSession, client: AsyncClient, tenant: str) -> None:
+    await _seed(db, tenant)
+    resp = await client.get(f"/tenants/{tenant}/recommendations")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["window_days"] == 90
+    # The seeded principal has reach and no usage, so it is over-granted.
+    assert body["recommendations"][0]["external_id"] == "svc-api"
+    assert body["recommendations"][0]["suggested_selector"] == "(revoke)"
+
+    narrowed = await client.get(f"/tenants/{tenant}/recommendations?window_days=7")
+    assert narrowed.json()["window_days"] == 7
 
 
 async def test_lifespan_builds_and_disposes_its_own_engine(

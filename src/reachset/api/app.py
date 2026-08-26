@@ -10,6 +10,7 @@ restart the API every time Postgres hiccups, which is the opposite of helpful.
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -18,6 +19,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from reachset.analysis import blast, least_privilege
 from reachset.config import load_settings
 from reachset.db import make_engine, make_session_factory
 from reachset.logging import configure_logging, get_logger
@@ -109,6 +111,53 @@ async def readyz(session: Annotated[AsyncSession, Depends(_session)]) -> Respons
 @app.get("/metrics")
 async def metrics() -> Response:
     return Response(content=render_metrics(), media_type=CONTENT_TYPE)
+
+
+@app.get("/tenants/{tenant_id}/blast-radius/{principal_id}")
+async def principal_blast_radius(
+    tenant_id: str,
+    principal_id: UUID,
+    session: Annotated[AsyncSession, Depends(_session)],
+    limit: int = blast.TOP_RESOURCES,
+) -> dict[str, Any]:
+    """Incident-response view: what one identity reaches, worst first."""
+    report = await blast.blast_radius_for_principal(session, tenant_id, principal_id, limit=limit)
+    if report is None:
+        raise HTTPException(status_code=404, detail="principal not found")
+    return report.as_dict()
+
+
+@app.get("/tenants/{tenant_id}/credentials/{credential_external_id}/blast-radius")
+async def credential_blast_radius(
+    tenant_id: str,
+    credential_external_id: str,
+    session: Annotated[AsyncSession, Depends(_session)],
+    limit: int = blast.TOP_RESOURCES,
+) -> dict[str, Any]:
+    """ "This token leaked" — what is reachable through it specifically."""
+    report = await blast.blast_radius_for_credential(
+        session, tenant_id, credential_external_id, limit=limit
+    )
+    if report is None:
+        raise HTTPException(status_code=404, detail="credential not found")
+    return report.as_dict()
+
+
+@app.get("/tenants/{tenant_id}/recommendations")
+async def recommendations(
+    tenant_id: str,
+    session: Annotated[AsyncSession, Depends(_session)],
+    window_days: int = least_privilege.DEFAULT_WINDOW_DAYS,
+) -> dict[str, Any]:
+    """Least-privilege recommendations: granted reach versus reach used."""
+    recs = await least_privilege.recommend(
+        session, tenant_id, now=datetime.now(UTC), window_days=window_days
+    )
+    return {
+        "tenant_id": tenant_id,
+        "window_days": window_days,
+        "recommendations": [r.as_dict() for r in recs],
+    }
 
 
 @app.get("/tenants/{tenant_id}/principals/{principal_id}/reach")
