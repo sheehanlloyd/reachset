@@ -45,8 +45,9 @@ def migrated_pg_url(pg_url: str) -> str:
 
 
 TRUNCATE_SQL = """
-TRUNCATE TABLE reach_edges, identity_links, events, grants, credentials, resources,
-    principals, sync_watermarks, dead_letters RESTART IDENTITY CASCADE
+TRUNCATE TABLE reach_snapshot_edges, reach_snapshots, reach_edges, identity_links,
+    events, grants, credentials, resources, principals, sync_watermarks, dead_letters
+    RESTART IDENTITY CASCADE
 """
 
 

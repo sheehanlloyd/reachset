@@ -288,6 +288,59 @@ class ReachEdge(Base):
     computed_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
 
 
+class ReachSnapshot(Base):
+    """A named, immutable capture of a tenant's reach set at one moment.
+
+    Snapshots exist so "what changed since Friday" is a set difference instead
+    of an archaeology project. The digest lets you tell two identical captures
+    apart from two that merely have the same edge count.
+    """
+
+    __tablename__ = "reach_snapshots"
+    __table_args__ = (UniqueConstraint("tenant_id", "label", name="uq_snapshot_label"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    tenant_id: Mapped[str] = mapped_column(Text)
+    label: Mapped[str] = mapped_column(Text)
+    taken_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
+    edge_count: Mapped[int] = mapped_column(Integer)
+    digest: Mapped[str] = mapped_column(Text)
+
+
+class ReachSnapshotEdge(Base):
+    """One edge inside a snapshot.
+
+    Denormalized on purpose: paths and external ids are copied rather than
+    joined, so a diff still reads correctly after the underlying principal or
+    resource has been deleted upstream — which is exactly when you most want to
+    read it.
+    """
+
+    __tablename__ = "reach_snapshot_edges"
+    __table_args__ = (
+        Index("ix_snapshot_edges_snapshot", "snapshot_id"),
+        UniqueConstraint(
+            "snapshot_id",
+            "principal_external_id",
+            "resource_path",
+            "capability",
+            name="uq_snapshot_edge",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("reach_snapshots.id", ondelete="CASCADE")
+    )
+    principal_external_id: Mapped[str] = mapped_column(Text)
+    principal_app_id: Mapped[str] = mapped_column(Text)
+    resource_path: Mapped[str] = mapped_column(Text)
+    resource_app_id: Mapped[str] = mapped_column(Text)
+    sensitivity: Mapped[int] = mapped_column(Integer)
+    capability: Mapped[Capability] = mapped_column(_enum(Capability, "capability"))
+    confidence: Mapped[float] = mapped_column(Float)
+
+
 class SyncWatermark(Base):
     __tablename__ = "sync_watermarks"
 
