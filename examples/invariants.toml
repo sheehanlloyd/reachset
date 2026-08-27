@@ -1,0 +1,36 @@
+# Policy-as-code invariants for `reachset check-invariants`. Each [[rule]]
+# is evaluated against a tenant's current materialized reach; a match is a
+# violation, full stop, no triage step. Put a rule here when the answer is
+# already decided ("no AI vendor gets this"), not when the question needs a
+# human to look at the evidence — that belongs in detections/ instead.
+#
+# Two rule kinds are implemented (src/reachset/analysis/invariants.py):
+#   vendor_capability_sensitivity - no principal matching these name globs
+#     may hold `capability` on a resource at or above `min_sensitivity`.
+#   max_apps_per_principal - no principal of these kinds may hold reach
+#     into more than `max_apps` distinct apps.
+#
+# `severity` must be one of SARIF's own levels (error | warning | note) —
+# see --sarif on the CLI command.
+
+[[rule]]
+id = "no-ai-vendor-sensitive-read"
+description = "No known AI vendor integration may hold read on sensitivity>=2 resources"
+kind = "vendor_capability_sensitivity"
+# Same shape as the shadow-AI detection's vendor list (detections/shadow_ai.py)
+# but not the same list on purpose: an invariant is a policy someone signed
+# off on, a detection is a heuristic that flags for review. Keeping them
+# separate means loosening the detection's pattern coverage never silently
+# loosens this rule.
+principal_patterns = ["*openai*", "*anthropic*", "*claude*", "*gemini*", "*summarize-ai*", "*copilot*"]
+capability = "read"
+min_sensitivity = 2
+severity = "error"
+
+[[rule]]
+id = "nhi-app-sprawl"
+description = "No non-human identity may hold reach into more than 2 apps"
+kind = "max_apps_per_principal"
+principal_kinds = ["service", "agent", "app"]
+max_apps = 2
+severity = "warning"
