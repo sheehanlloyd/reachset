@@ -1,4 +1,4 @@
-.PHONY: up down install migrate test test-unit lint typecheck bench seed fmt
+.PHONY: up down install migrate test test-unit lint typecheck bench seed demo fmt
 
 UV ?= uv
 
@@ -45,4 +45,14 @@ bench:
 	$(UV) run python -m bench.plot
 
 seed:
-	$(UV) run python -m reachset.synth.generator --tenant demo --principals 200 --grants 800 --events 5000
+	$(UV) run python -m reachset.synth.generator --tenant synth --principals 200 --grants 800 --events 5000
+
+# Load both fixture connectors into a `demo` tenant and show it off. This is
+# the fastest way to see what the tool actually does on a clean checkout.
+demo: migrate
+	$(UV) run reachset sync --tenant demo --app vault  --fixtures tests/fixtures/vault
+	$(UV) run reachset sync --tenant demo --app github --fixtures tests/fixtures/github
+	@echo
+	$(UV) run reachset blast-radius --tenant demo --principal token:acc-null-display --limit 5
+	@echo
+	$(UV) run reachset detect --tenant demo
