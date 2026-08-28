@@ -88,9 +88,21 @@ filterwarnings = [
 [tool.coverage.run]
 source = ["src/reachset"]
 branch = true
+# SQLAlchemy's async layer switches through greenlets and FastAPI resolves
+# dependencies via anyio worker threads; without these, code that genuinely
+# ran reports as uncovered.
+concurrency = ["thread", "greenlet"]
 
 [tool.coverage.report]
-fail_under = 85
+# The suite covers 100% of lines and branches on a typical run. The gate sits
+# one point lower on purpose: the reachability property test generates a fresh
+# random graph set on every run, and roughly one run in ten leaves a single
+# data-dependent branch unexercised. Pinning Hypothesis to a fixed seed would
+# make the gate exact but would also stop it exploring new graphs, which is the
+# entire point of that test. A CI gate that fails at random is worse than one
+# with a hair of slack, so the randomness stays and the floor gives way.
+# Anything genuinely unexecutable carries a pragma with a reason instead.
+fail_under = 99
 show_missing = true
 exclude_lines = [
     "pragma: no cover",
