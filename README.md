@@ -27,11 +27,19 @@ edge it claims.
    Redis queue                       Reachability engine
    + watermarks                      (recursive CTE)
         │                                    │
-   Worker pool                        ┌──────▼───────┐
-   (docker-compose)                   │  Detections  │
-                                      └──────┬───────┘
+   Worker pool                 ┌──────────────┴──────────────┐
+   (docker-compose)            │                             │
+                        ┌──────▼───────┐            ┌────────▼────────┐
+                        │  Detections  │            │    Analyses     │
+                        │   (6 rules)  │            │  blast radius,  │
+                        └──────┬───────┘            │ what-if revoke, │
+                               │                    │ least privilege,│
+                               │                    │  reach drift,   │
+                               │                    │  invariants     │
+                               │                    └────────┬────────┘
+                               └─────────────┬───────────────┘
                                              │
-                                      FastAPI  +  MCP server
+                       CLI   ·   FastAPI (+ /metrics, /readyz)   ·   MCP
                                              │
                               Analyst → Adversary → Adjudicator
 ```
@@ -53,20 +61,57 @@ Needs Docker, `uv`, and Python 3.12.
 make install    # uv sync
 make up         # postgres + redis + vault (dev mode) via docker-compose
 make migrate    # alembic upgrade head
+make demo       # load both fixture connectors and show what they surface
 make test       # full suite incl. live-Vault integration tests
 make bench      # writes measured numbers to bench/results.json
-make seed       # small synthetic tenant for poking around
+make seed       # larger synthetic tenant for poking around
 ```
+
+`make demo` is the thirty-second version: it ingests the committed Vault and
+GitHub fixtures into a `demo` tenant, prints the blast radius of the Vault
+admin token, and runs every detection over the result. On the fixture data that
+turns up a shadow-AI integration reading production repositories and three
+dormant privileged non-human identities.
 
 `make test` points the suite at the compose stack; without those env vars the
 suite falls back to testcontainers. CI runs the same tests against service
 containers, including a real `vault server -dev`.
 
+Installing the package puts a `reachset` command on your path — that is what
+`make demo` drives, and there is more of it than the demo shows:
+
+```
+reachset sync             --tenant T --app vault --fixtures DIR
+reachset reach            --tenant T --principal EXT_ID [--format table|mermaid|dot]
+reachset explain          --tenant T --principal EXT_ID --resource PATH --capability read [--format table|mermaid|dot]
+reachset blast-radius     --tenant T [--principal EXT_ID | --credential EXT_ID]
+reachset simulate-revoke  --tenant T --grant UUID [--grant UUID ...]
+reachset recommend        --tenant T [--window DAYS]
+reachset snapshot         --tenant T --label NAME | --list
+reachset diff             --tenant T --from NAME --to NAME
+reachset detect           --tenant T
+reachset check-invariants --tenant T --config rules.toml [--sarif PATH] [--fail-on-violation]
+```
+
+Every subcommand takes `--json` for machine-readable output. `detect
+--fail-on-findings`, `diff --fail-on-change`, and `check-invariants
+--fail-on-violation` exit `2` instead of `0`, which is what makes them usable
+as a CI gate. `reach --format mermaid` and `explain --format mermaid` render
+the fan-out or the single derivation path as a graph instead of a table —
+paste the output straight into a GitHub markdown block and it renders inline.
+
 ## A worked example
 
 Why can `jortega`, a GitHub user, read a Vault production secret he has no
-Vault grant for? This is real output from the pipeline running over the
-committed GitHub fixtures plus a Vault entity — computed, not drawn:
+Vault grant for? This is real, computed output — not drawn — from
+`test_cross_app_reach_via_deterministic_link` in
+[tests/integration/test_github_fixtures.py](tests/integration/test_github_fixtures.py),
+run over the committed GitHub fixtures plus one Vault entity seeded directly
+in the test. That entity isn't in `tests/fixtures/vault/`: the Vault connector
+only reads token-accessor lookups today, never entity metadata, so no
+committed Vault fixture carries an entity email at all (tracked in
+[NOTES.md](NOTES.md)). `make demo`'s two-command sync won't reproduce this
+example on its own for that reason — run the test above to see it live.
 
 ```json
 {
@@ -106,48 +151,203 @@ materializes carries a derivation like this one; an edge it can't explain is a
 bug by definition. Had the link been a fuzzy name match instead, it would not
 have expanded reach at all — fuzzy links only flag for review.
 
+## Answering the three questions people actually ask
+
+The PRD names three users. Each one gets a query rather than a data dump.
+
+**"Credential X is compromised — what is reachable through it?"** Blast radius
+ranks by capability first and sensitivity second, because being able to delete
+a sensitivity-2 resource is worse than reading a sensitivity-3 one. Ask it about
+a principal, or about one specific credential — `--credential` counts only the
+edges whose derivation actually runs through that credential's grants, since
+holding one Vault token does not hand you the reach of every other token its
+owner happens to hold:
+
+```
+$ reachset blast-radius --tenant demo --principal token:acc-null-display --limit 4
+token:acc-null-display reaches 6 resource(s) across 1 app(s) (vault); 4 of them
+are sensitive and writable.
+
+SCORE  RESOURCE                   APP    SENS  CAPABILITIES
+-----  -------------------------  -----  ----  -----------------------
+20     auth/approle               vault  3     admin,delete,read,write
+20     auth/token                 vault  3     admin,delete,read,write
+20     secret/data/prod/api-keys  vault  3     admin,delete,read,write
+20     secret/data/prod/db        vault  3     admin,delete,read,write
+
+(+2 more resources; raise --limit to see them)
+```
+
+That token holds Vault's `admin-sudo` policy, so it reaches the auth mounts as
+well as the secrets — and it reaches *only* Vault, because a grant never
+escapes the app that issued it.
+
+The inverse question — "if I revoke this, what actually breaks?" — is the same
+engine run with those grants suppressed and the results diffed. It is a
+read-only query; nothing is written and there is no transaction to remember to
+roll back. The interesting part of the output is usually the collateral: which
+*other* principals were quietly borrowing that grant through a delegation
+chain, and which resources stay reachable anyway by a second path.
+
+**"Which non-human identities are over-granted?"** Least-privilege analysis
+joins what a principal can reach against what it actually touched over a
+window, and proposes a narrowed selector derived from the longest common
+prefix of the paths it really used:
+
+```
+$ reachset recommend --tenant demo
+SEVERITY  PRINCIPAL                GRANTED  USED  UNUSED CAPS              SUGGESTED SELECTOR
+--------  -----------------------  -------  ----  -----------------------  ------------------
+high      token:acc-null-display         6     0  admin,delete,read,write  (revoke)
+high      ci-deployer                    2     0  read,write               (revoke)
+high      legacy-deploy@prod             1     0  read,write               (revoke)
+medium    summarize-ai                   4     0  read                     (revoke)
+```
+
+A principal that has touched nothing in the window gets `(revoke)` rather than
+a narrower scope, because there is nothing to justify keeping. Nothing here
+revokes anything on its own — Reachset reports, it does not remediate.
+
+**"What changed since Friday?"** A detection tells you what is wrong now, which
+means a nightly report re-lists the same 400 known edges forever. Snapshots
+capture a tenant's reach under a label; the diff is a `FULL OUTER JOIN` between
+two of them, reporting added, removed, and confidence-changed edges. Snapshot
+rows denormalize paths and external ids rather than referencing live rows, so a
+diff still reads correctly after the upstream principal has been deleted —
+which is exactly when you most want to read it.
+
+```
+$ reachset diff --tenant demo --from before --to after --fail-on-change
+4 edge(s) added (3 on sensitive resources), 0 removed, 0 changed between
+'before' and 'after'.
+
+   PRINCIPAL        RESOURCE           CAP    SENS
+-  ---------------  -----------------  -----  ----
++  installation:42  acme/payments-api  write  3
++  installation:42  acme/prod-infra    write  3
++  installation:42  acme/data-tools    write  2
++  installation:42  acme/website       write  1
+
+$ echo $?
+2
+```
+
+Installation 42 is `summarize-ai`, the AI integration in the fixtures. Between
+the two snapshots its `contents` permission went from `read` to `write`, and
+the diff shows precisely what that bought it: write access to every repository
+in the org, three of them sensitive. That is the report worth waking up to,
+and the non-zero exit is what lets a nightly job page someone about it.
+
+**"Has anyone violated a policy we've already decided on?"** A detection
+flags a pattern for a human to judge; an invariant is a rule someone already
+signed off on — no triage step, a match is a violation. `check-invariants`
+reads a declarative TOML file ([examples/invariants.toml](examples/invariants.toml))
+and evaluates it against materialized reach:
+
+```
+$ reachset check-invariants --tenant demo --config examples/invariants.toml --fail-on-violation
+SEVERITY  RULE                         DETAIL
+--------  ---------------------------  --------------------------------------------------------------
+error     no-ai-vendor-sensitive-read  summarize-ai holds 'read' on 3 resource(s) at sensitivity >= 2
+
+$ echo $?
+2
+```
+
+Same `summarize-ai` integration, same underlying fact as the diff above, but
+framed as a standing policy rather than a point-in-time change — this fires
+every run until the grant is actually narrowed, which is the point. `--sarif
+PATH` writes the same violations as SARIF 2.1.0, ready for GitHub code
+scanning to ingest as a check run.
+
+## Operations
+
+`/healthz` is liveness and deliberately touches nothing — a liveness probe that
+queried the database would restart the API every time Postgres hiccups.
+`/readyz` is readiness: it actually exercises the dependency, returns `503` so a
+load balancer drains the instance instead of routing into errors, and names the
+check that failed rather than saying only "not ready".
+
+`/metrics` serves Prometheus text: ingest counts and durations, dead letters,
+materialized edges per tenant, recompute time by mode, findings by rule and
+severity, and HTTP latency. Request metrics are labeled with the *route
+template*, not the path, so a tenant with 10,000 principals produces one time
+series instead of 10,000 — the cardinality mistake that eventually takes a
+Prometheus instance down. The registry itself is hand-written in
+[observability.py](src/reachset/observability.py): counters, gauges, and
+cumulative histograms with labels, and deliberately nothing else — no
+exemplars, no native histograms, no multiprocess collection. Taking
+`prometheus_client` instead would have been perfectly defensible; I wrote it
+because the exposition format is small enough to own and I wanted the label
+and bucket semantics under test. The call sites are shaped so the library
+drops in unchanged the day any of those missing features matter.
+
 ## Benchmarks
 
-Measured 2026-08-18 on an Apple M4 Pro (14 cores, 24 GB RAM), macOS 26.5,
-Python 3.12.11, Postgres 16 in Docker, scale profile `medium`:
+Measured 2026-08-28 on an Apple M4 Pro (14 cores, 24 GB RAM),
+macOS 26.5, Python 3.12.11, Postgres 16 in Docker, scale profile `medium`,
+against a freshly created database (`docker compose down -v && make up` first).
+This is a re-run after the exact/glob selector split and streaming
+materialization landed (below); the numbers moved enough from the previous
+table that it's worth saying so rather than quietly swapping them in.
 
 **Ingest throughput** (50,000 audit events, idempotent upserts, asyncio workers
 sharing one connection pool):
 
 | workers | events/sec |
 | ---: | ---: |
-| 1 | 494 |
-| 2 | 876 |
-| 4 | 890 |
-| 8 | 886 |
+| 1 | 636 |
+| 2 | 894 |
+| 4 | 892 |
+| 8 | 885 |
 
-Throughput doubles from one to two workers and then flattens: the shared
-connection pool and Postgres round-trips are the bottleneck, not Python.
+Throughput climbs from one worker to two and then flattens. The bottleneck is
+Postgres round-trips and the shared pool, not Python, so adding workers past
+that buys nothing. An earlier run on a database that had absorbed a full test
+session showed eight workers collapsing to a third of that; it did not
+reproduce on a clean database, so I am recording it as contention rather than
+as a scaling property.
 
-**Reachability** (synthetic tenants, long-tail grant distribution):
+**Reachability** (synthetic tenants, long-tail grant distribution, 300
+single-origin queries per row):
 
-| tenant scale | materialized edges | full recompute | incremental (50 origins) | query p50 | p95 | p99 |
+| tenant scale | materialized edges | full recompute | incremental (50 origins) | p50 | p95 | p99 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 500 principals / 2k grants | 21,528 | 1.2 s | 6.0 s | 114.7 ms | 124.4 ms | 128.6 ms |
-| 1,500 / 6k | 197,914 | 9.3 s | 2.3 s | 27.2 ms | 54.5 ms | 112.2 ms |
-| 5,000 / 20k | 2,037,994 | 112.8 s | 14.3 s | 233.7 ms | 280.4 ms | 448.6 ms |
+| 500 / 2,000 | 26,324 | 1.0 s | 0.5 s | 3 ms | 9 ms | 12 ms |
+| 1,500 / 6,000 | 198,998 | 7.0 s | 0.7 s | 4 ms | 15 ms | 59 ms |
+| 5,000 / 20,000 | 2,069,138 | 94.4 s | 2.7 s | 6 ms | 26 ms | 266 ms |
 
-Two honest footnotes. First, incremental recompute only beats full recompute
-once tenants get big — at the smallest scale, looping 50 single-origin queries
-costs more than one set-based pass. Second, the latency inversion between the
-two smaller tenants (114 ms vs 27 ms p50) is planner/statistics noise measured
-right after bulk writes, not a real scaling effect; I report what was measured
-rather than smoothing it.
+Peak process RSS was **126.5 MB**, down from 4.3 GB in the previous run of
+this same benchmark. That drop is `materialize()` streaming the CTE's result
+through a server-side cursor in bounded chunks instead of buffering the whole
+2M-row result set in Python first — the fix flagged as "obvious next" in the
+previous version of this table, now landed (`reach/engine.py::_stream_materialize`).
 
-Peak process RSS during the run was ~4.9 GB (dominated by holding the 2M-edge
-result set in Python during materialization — streaming that insert is an
-obvious next optimization).
+The largest full-recompute figure also dropped, from 154.8 s to 94.4 s (about
+39%), and single-origin p50/p95 both improved at every scale — the exact/glob
+selector split (below) reduces the cost of the reachability query itself, not
+just its memory profile. p99 at the largest scale is noisy (266 ms here vs.
+543 ms previously — both are one-run numbers, not averages, so read the
+overall direction rather than the single figure).
+
+Two things in that table are worth reading carefully rather than skimming.
+Incremental recompute only beats a full pass once tenants get large — at the
+smallest scale, looping 50 single-origin queries costs more than one set-based
+sweep, which is why the CLI does not quietly "optimize" small tenants into the
+incremental path. And the largest row has moved twice now during this
+project's life: before the `hops` CTE was marked `MATERIALIZED`, the same
+benchmark reported 341 s and a p50 of 1,529 ms; after that fix it was 154.8 s;
+after streaming materialization and the exact/glob selector split (which
+eliminates the impersonation arm's cross join for every selector that isn't
+an actual glob — see [NOTES.md](NOTES.md), "Reach engine performance") it's
+94.4 s. Reading the query plan was worth more than any amount of guessing
+about it each time.
 
 Numbers are measured, not targeted. Every figure above is reproducible with
-`make bench` (`BENCH_SCALE=medium` for this table) and comes from
+`BENCH_SCALE=medium make bench` and comes from
 [bench/results.json](bench/results.json), which records the machine and the
-scale that actually ran. The PRD's target scales go up to 10M edges; this
-table is the scale I have actually run on this machine, stated as such.
+scale that actually ran. The PRD's target scales go up to 10M edges; this table
+is the scale I have actually run on this machine, stated as such.
 
 ## Detections
 
@@ -222,11 +422,22 @@ Being precise about what has actually been verified against what:
   fixtures can't prove (auth modes for installation endpoints, Link-header
   pagination, exact field shapes) is listed as unverified assumptions in
   [NOTES.md](NOTES.md).
+- **Verified locally, against real infrastructure but not a real tenant:** the
+  HTTP transport (driven against a throwaway localhost server that produces
+  429s with `Retry-After`, HTTP-date `Retry-After`, 5xx, connections dropped
+  mid-body, and timeouts, plus one live call against the Vault dev server); the
+  CLI, the analyses, and the operational endpoints, all exercised against a real
+  Postgres; the Redis-backed distributed rate limiter, exercised against a real
+  Redis with genuinely concurrent workers and real wall-clock timing (not a
+  fake clock), because the bug it fixes only shows up under real concurrency.
 - **Not yet verified:** Google Workspace and Salesforce connectors (not
   started); GitHub live mode (Link-header cursor adapter, app JWT auth);
-  Vault `+` segment-wildcard fidelity; audit ingestion from the worker (the
-  worker syncs Vault but does not read the audit file; only the direct
-  connector path does).
+  audit ingestion from the worker (the worker syncs Vault but does not read
+  the audit file; only the direct connector path does); metrics under more
+  than one API replica (they are per-process and in-memory, so each replica
+  must be scraped separately); `RedisBucketRegistry` wired into the actual
+  worker sync path (`StreamSyncer` — the class it plugs into — isn't called
+  anywhere in the worker yet; see NOTES.md).
 
 [NOTES.md](NOTES.md) is the full running list of unconfirmed assumptions, kept
 as a checklist so they can be turned into verified facts or fixes.
@@ -238,11 +449,16 @@ src/reachset/
   connectors/    transport + extractor per app (vault/, github/)
   ingest/        idempotent upserts, watermarks, rate limiting, worker, DLQ
   linking/       identity correlation + labeled synthetic dataset
-  reach/         recursive-CTE engine, naive BFS reference, selector language
+  reach/         recursive-CTE engine, naive BFS reference, selector language,
+                 Mermaid/DOT graph rendering
+  analysis/      blast radius, what-if revocation, least privilege, snapshots,
+                 policy-as-code invariants (TOML rules, SARIF output)
   detections/    six rules + declarative registries (scopes, AI vendors)
   mcp/           MCP tools + server wrapper
   triage/        Analyst/Adversary/Adjudicator, sanitization, eval harness
   synth/         synthetic tenant generator
+  cli.py         the `reachset` command
+  observability.py  metrics registry + Prometheus exposition
 bench/           harness + measured results (results.json, identity_linking.json,
                  triage_eval.json)
 tests/           unit, integration (incl. live Vault), chaos, redteam
@@ -251,8 +467,38 @@ tests/           unit, integration (incl. live Vault), chaos, redteam
 ## Engineering notes
 
 Python 3.12, `uv`, FastAPI, Postgres 16, Redis 7, SQLAlchemy 2 (asyncpg),
-Alembic, structlog. `ruff` and `mypy --strict` clean; coverage floor 85%
-enforced in CI; `gitleaks` runs in the pre-commit hook and in CI. The single
-most important test in the repo is the Hypothesis property test asserting the
-reachability CTE agrees exactly with a naive Python BFS on random graphs — see
+Alembic, structlog. `ruff` and `mypy --strict` clean, `gitleaks` in both the
+pre-commit hook and CI.
+
+413 tests cover 100% of lines and branches in `src/` on a typical run. The CI
+gate is set at 99% rather than 100% deliberately: the reachability property test
+generates a fresh random graph set every run, and about one run in ten leaves a
+single data-dependent branch unexercised. Pinning the seed would make the gate
+exact and would also stop the test exploring new graphs, which is the whole
+reason it exists — so the randomness stays and the floor gives way by a point.
+Seven `# pragma: no cover` markers exist: four on `Protocol` class/method
+bodies that structurally never execute (`Transport`, `Detection`, and the two
+methods of the rate limiter's `Bucket`/`BucketSource` protocols), and three on
+lines that are genuinely untestable rather than merely inconvenient —
+interactive-only `KeyboardInterrupt` handling, the `if __name__ ==
+"__main__"` entry point, and a FastAPI dependency the test fixture always
+overrides. (An earlier draft of this file claimed "three, all on Protocol
+bodies" — untrue even before this round of changes, since the three
+non-Protocol ones already existed; a grep-and-count pass during this polish
+found the discrepancy.) Everything else is covered by a test rather than
+excused.
+
+Coverage is configured with `concurrency = ["thread", "greenlet"]`, without
+which every endpoint that resolves a database session through a FastAPI
+dependency reports as uncovered despite being exercised — that measurement bug
+was understating the project by about five points until I chased down why
+tested endpoints were showing red.
+
+The single most important test in the repo is the Hypothesis property test
+asserting the reachability CTE agrees exactly with a naive Python BFS on random
+graphs — see
 [tests/integration/test_reach_property.py](tests/integration/test_reach_property.py).
+It has now caught two real bugs: a recursive CTE shape Postgres rejects, and a
+`%` escaping error that made selectors containing LIKE metacharacters match
+paths they shouldn't. Both times a mutation check confirmed the test fails when
+the semantics drift.
