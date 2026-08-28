@@ -2,31 +2,31 @@
 <rect width="900" height="360" fill="white"/>
 <text x="450.0" y="20.0" font-size="13" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">Reachset benchmarks — Apple M4 Pro, scale profile: medium</text>
 <text x="260.0" y="50.0" font-size="12" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">ingest throughput (events/sec)</text>
-<rect x="80.0" y="177.9" width="60.0" height="122.1" fill="#4c78a8"><title>1 workers: 494 ev/s</title></rect>
-<text x="110.0" y="171.9" font-size="11" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">494</text>
+<rect x="80.0" y="143.5" width="60.0" height="156.5" fill="#4c78a8"><title>1 workers: 636 ev/s</title></rect>
+<text x="110.0" y="137.5" font-size="11" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">636</text>
 <text x="110.0" y="316.0" font-size="11" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">1w</text>
-<rect x="170.0" y="83.5" width="60.0" height="216.5" fill="#4c78a8"><title>2 workers: 876 ev/s</title></rect>
-<text x="200.0" y="77.5" font-size="11" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">876</text>
+<rect x="170.0" y="80.0" width="60.0" height="220.0" fill="#4c78a8"><title>2 workers: 894 ev/s</title></rect>
+<text x="200.0" y="74.0" font-size="11" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">894</text>
 <text x="200.0" y="316.0" font-size="11" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">2w</text>
-<rect x="260.0" y="80.0" width="60.0" height="220.0" fill="#4c78a8"><title>4 workers: 890 ev/s</title></rect>
-<text x="290.0" y="74.0" font-size="11" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">890</text>
+<rect x="260.0" y="80.5" width="60.0" height="219.5" fill="#4c78a8"><title>4 workers: 892 ev/s</title></rect>
+<text x="290.0" y="74.5" font-size="11" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">892</text>
 <text x="290.0" y="316.0" font-size="11" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">4w</text>
-<rect x="350.0" y="81.0" width="60.0" height="219.0" fill="#4c78a8"><title>8 workers: 886 ev/s</title></rect>
-<text x="380.0" y="75.0" font-size="11" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">886</text>
+<rect x="350.0" y="82.2" width="60.0" height="217.8" fill="#4c78a8"><title>8 workers: 885 ev/s</title></rect>
+<text x="380.0" y="76.2" font-size="11" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">885</text>
 <text x="380.0" y="316.0" font-size="11" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">8w</text>
 <text x="680.0" y="50.0" font-size="12" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">single-origin reach latency (ms)</text>
-<rect x="520.0" y="243.8" width="20.0" height="56.2" fill="#4c78a8"><title>p50_ms: 114.687 ms</title></rect>
-<rect x="546.0" y="239.0" width="20.0" height="61.0" fill="#f58518"><title>p95_ms: 124.428 ms</title></rect>
-<rect x="572.0" y="236.9" width="20.0" height="63.1" fill="#e45756"><title>p99_ms: 128.605 ms</title></rect>
-<text x="559.0" y="316.0" font-size="10" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">21,528 edges</text>
-<rect x="630.0" y="286.6" width="20.0" height="13.4" fill="#4c78a8"><title>p50_ms: 27.234 ms</title></rect>
-<rect x="656.0" y="273.3" width="20.0" height="26.7" fill="#f58518"><title>p95_ms: 54.484 ms</title></rect>
-<rect x="682.0" y="245.0" width="20.0" height="55.0" fill="#e45756"><title>p99_ms: 112.151 ms</title></rect>
-<text x="669.0" y="316.0" font-size="10" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">197,914 edges</text>
-<rect x="740.0" y="185.4" width="20.0" height="114.6" fill="#4c78a8"><title>p50_ms: 233.689 ms</title></rect>
-<rect x="766.0" y="162.5" width="20.0" height="137.5" fill="#f58518"><title>p95_ms: 280.376 ms</title></rect>
-<rect x="792.0" y="80.0" width="20.0" height="220.0" fill="#e45756"><title>p99_ms: 448.625 ms</title></rect>
-<text x="779.0" y="316.0" font-size="10" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">2,037,994 edges</text>
+<rect x="520.0" y="297.1" width="20.0" height="2.9" fill="#4c78a8"><title>p50_ms: 3.449 ms</title></rect>
+<rect x="546.0" y="292.4" width="20.0" height="7.6" fill="#f58518"><title>p95_ms: 9.238 ms</title></rect>
+<rect x="572.0" y="289.9" width="20.0" height="10.1" fill="#e45756"><title>p99_ms: 12.195 ms</title></rect>
+<text x="559.0" y="316.0" font-size="10" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">26,324 edges</text>
+<rect x="630.0" y="297.0" width="20.0" height="3.0" fill="#4c78a8"><title>p50_ms: 3.672 ms</title></rect>
+<rect x="656.0" y="287.8" width="20.0" height="12.2" fill="#f58518"><title>p95_ms: 14.793 ms</title></rect>
+<rect x="682.0" y="251.3" width="20.0" height="48.7" fill="#e45756"><title>p99_ms: 58.893 ms</title></rect>
+<text x="669.0" y="316.0" font-size="10" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">198,998 edges</text>
+<rect x="740.0" y="294.7" width="20.0" height="5.3" fill="#4c78a8"><title>p50_ms: 6.437 ms</title></rect>
+<rect x="766.0" y="278.1" width="20.0" height="21.9" fill="#f58518"><title>p95_ms: 26.486 ms</title></rect>
+<rect x="792.0" y="80.0" width="20.0" height="220.0" fill="#e45756"><title>p99_ms: 265.837 ms</title></rect>
+<text x="779.0" y="316.0" font-size="10" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">2,069,138 edges</text>
 <rect x="520.0" y="330.0" width="12.0" height="12.0" fill="#4c78a8"><title>p50</title></rect>
 <text x="556.0" y="340.0" font-size="10" text-anchor="middle" font-family="system-ui, sans-serif" fill="#333">p50</text>
 <rect x="590.0" y="330.0" width="12.0" height="12.0" fill="#f58518"><title>p95</title></rect>
