@@ -7,14 +7,6 @@
   "precision": 0.9891,
   "recall": 0.905,
   "by_method": {
-    "sso_subject": {
-      "predicted": 32,
-      "correct": 32
-    },
-    "external_id_exact": {
-      "predicted": 21,
-      "correct": 21
-    },
     "email_exact": {
       "predicted": 111,
       "correct": 111
@@ -22,6 +14,14 @@
     "fuzzy_name": {
       "predicted": 19,
       "correct": 17
+    },
+    "sso_subject": {
+      "predicted": 32,
+      "correct": 32
+    },
+    "external_id_exact": {
+      "predicted": 21,
+      "correct": 21
     }
   },
   "note": "precision is asserted >= 0.98 in tests/unit/test_linker.py; recall is reported, not asserted"
