@@ -54,6 +54,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # gitleaks-action scans a commit range (base..head); actions/checkout's
+          # default shallow clone doesn't have enough history for that to resolve,
+          # and fails the whole job with "ambiguous argument" rather than an actual
+          # leak. A full clone is what the scan needs to walk the range at all.
+          fetch-depth: 0
 
       - name: Fix audit dir permissions
         # The vault container runs as the "vault" user; the runner-created mount
