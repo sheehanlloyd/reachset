@@ -4,8 +4,8 @@ Reachset ingests identity, credential, grant, and activity data from multiple
 SaaS apps, normalizes it into one canonical Postgres schema, and computes the
 **effective reachability set** of every identity: which resources each
 principal can actually reach, with which capability, via which derivation
-path. The focus is non-human identities — service accounts, OAuth apps, AI
-agents — because their granted scopes badly understate what they can touch.
+path. The focus is non-human identities: service accounts, OAuth apps, AI
+agents. Their granted scopes badly understate what they can touch.
 
 An agent holding `repo` on a GitHub org, or a Vault token bound to a broad
 policy, reaches far more than its scope string suggests, because access flows
@@ -49,8 +49,8 @@ fixtures, or seeded chaos injection) and an **extractor** (pure functions from
 API JSON to canonical records). That split is why the whole pipeline is
 testable offline, and why the chaos suite can prove no-loss/no-duplicate
 behavior under 429 storms, connection resets, truncated bodies, and pagination
-pathologies. The reasoning behind the bigger decisions — including why
-reachability is a recursive CTE in Postgres and not a graph database — is in
+pathologies. The reasoning behind the bigger decisions, including why
+reachability is a recursive CTE in Postgres and not a graph database, is in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Quickstart
@@ -77,8 +77,8 @@ dormant privileged non-human identities.
 suite falls back to testcontainers. CI runs the same tests against service
 containers, including a real `vault server -dev`.
 
-Installing the package puts a `reachset` command on your path — that is what
-`make demo` drives, and there is more of it than the demo shows:
+Installing the package puts a `reachset` command on your path. That's what
+`make demo` drives, and there's more of it than the demo shows:
 
 ```
 reachset sync             --tenant T --app vault --fixtures DIR
@@ -97,13 +97,13 @@ Every subcommand takes `--json` for machine-readable output. `detect
 --fail-on-findings`, `diff --fail-on-change`, and `check-invariants
 --fail-on-violation` exit `2` instead of `0`, which is what makes them usable
 as a CI gate. `reach --format mermaid` and `explain --format mermaid` render
-the fan-out or the single derivation path as a graph instead of a table —
-paste the output straight into a GitHub markdown block and it renders inline.
+the fan-out or the single derivation path as a graph instead of a table. Paste
+the output straight into a GitHub markdown block and it renders inline.
 
 ## A worked example
 
 Why can `jortega`, a GitHub user, read a Vault production secret he has no
-Vault grant for? This is real, computed output — not drawn — from
+Vault grant for? This is real, computed output (not drawn) from
 `test_cross_app_reach_via_deterministic_link` in
 [tests/integration/test_github_fixtures.py](tests/integration/test_github_fixtures.py),
 run over the committed GitHub fixtures plus one Vault entity seeded directly
@@ -111,7 +111,7 @@ in the test. That entity isn't in `tests/fixtures/vault/`: the Vault connector
 only reads token-accessor lookups today, never entity metadata, so no
 committed Vault fixture carries an entity email at all (tracked in
 [NOTES.md](NOTES.md)). `make demo`'s two-command sync won't reproduce this
-example on its own for that reason — run the test above to see it live.
+example on its own for that reason; run the test above to see it live.
 
 ```json
 {
@@ -149,19 +149,19 @@ His GitHub profile email is `j.ortega+gh@acme.io`; his Vault entity's is
 the secret, and confidence multiplies along the path. Every edge Reachset
 materializes carries a derivation like this one; an edge it can't explain is a
 bug by definition. Had the link been a fuzzy name match instead, it would not
-have expanded reach at all — fuzzy links only flag for review.
+have expanded reach at all; fuzzy links only flag for review.
 
 ## Answering the three questions people actually ask
 
 The PRD names three users. Each one gets a query rather than a data dump.
 
-**"Credential X is compromised — what is reachable through it?"** Blast radius
+**"Credential X is compromised: what is reachable through it?"** Blast radius
 ranks by capability first and sensitivity second, because being able to delete
-a sensitivity-2 resource is worse than reading a sensitivity-3 one. Ask it about
-a principal, or about one specific credential — `--credential` counts only the
-edges whose derivation actually runs through that credential's grants, since
-holding one Vault token does not hand you the reach of every other token its
-owner happens to hold:
+a sensitivity-2 resource is worse than reading a sensitivity-3 one. Ask it
+about a principal, or about one specific credential. `--credential` counts
+only the edges whose derivation actually runs through that credential's
+grants, since holding one Vault token doesn't hand you the reach of every
+other token its owner happens to hold:
 
 ```
 $ reachset blast-radius --tenant demo --principal token:acc-null-display --limit 4
@@ -179,10 +179,10 @@ SCORE  RESOURCE                   APP    SENS  CAPABILITIES
 ```
 
 That token holds Vault's `admin-sudo` policy, so it reaches the auth mounts as
-well as the secrets — and it reaches *only* Vault, because a grant never
+well as the secrets, and it reaches *only* Vault, because a grant never
 escapes the app that issued it.
 
-The inverse question — "if I revoke this, what actually breaks?" — is the same
+The inverse question, "if I revoke this, what actually breaks?", is the same
 engine run with those grants suppressed and the results diffed. It is a
 read-only query; nothing is written and there is no transaction to remember to
 roll back. The interesting part of the output is usually the collateral: which
@@ -206,15 +206,15 @@ medium    summarize-ai                   4     0  read                     (revo
 
 A principal that has touched nothing in the window gets `(revoke)` rather than
 a narrower scope, because there is nothing to justify keeping. Nothing here
-revokes anything on its own — Reachset reports, it does not remediate.
+revokes anything on its own; Reachset reports, it doesn't remediate.
 
-**"What changed since Friday?"** A detection tells you what is wrong now, which
-means a nightly report re-lists the same 400 known edges forever. Snapshots
-capture a tenant's reach under a label; the diff is a `FULL OUTER JOIN` between
-two of them, reporting added, removed, and confidence-changed edges. Snapshot
-rows denormalize paths and external ids rather than referencing live rows, so a
-diff still reads correctly after the upstream principal has been deleted —
-which is exactly when you most want to read it.
+**"What changed since Friday?"** A detection tells you what is wrong now,
+which means a nightly report re-lists the same 400 known edges forever.
+Snapshots capture a tenant's reach under a label; the diff is a `FULL OUTER
+JOIN` between two of them, reporting added, removed, and confidence-changed
+edges. Snapshot rows denormalize paths and external ids rather than
+referencing live rows, so a diff still reads correctly after the upstream
+principal has been deleted, which is exactly when you most want to read it.
 
 ```
 $ reachset diff --tenant demo --from before --to after --fail-on-change
@@ -240,7 +240,7 @@ and the non-zero exit is what lets a nightly job page someone about it.
 
 **"Has anyone violated a policy we've already decided on?"** A detection
 flags a pattern for a human to judge; an invariant is a rule someone already
-signed off on — no triage step, a match is a violation. `check-invariants`
+signed off on: no triage step, a match is a violation. `check-invariants`
 reads a declarative TOML file ([examples/invariants.toml](examples/invariants.toml))
 and evaluates it against materialized reach:
 
@@ -255,32 +255,32 @@ $ echo $?
 ```
 
 Same `summarize-ai` integration, same underlying fact as the diff above, but
-framed as a standing policy rather than a point-in-time change — this fires
+framed as a standing policy rather than a point-in-time change. This fires
 every run until the grant is actually narrowed, which is the point. `--sarif
 PATH` writes the same violations as SARIF 2.1.0, ready for GitHub code
 scanning to ingest as a check run.
 
 ## Operations
 
-`/healthz` is liveness and deliberately touches nothing — a liveness probe that
-queried the database would restart the API every time Postgres hiccups.
-`/readyz` is readiness: it actually exercises the dependency, returns `503` so a
-load balancer drains the instance instead of routing into errors, and names the
-check that failed rather than saying only "not ready".
+`/healthz` is liveness and deliberately touches nothing. A liveness probe
+that queried the database would restart the API every time Postgres hiccups.
+`/readyz` is readiness: it actually exercises the dependency, returns `503` so
+a load balancer drains the instance instead of routing into errors, and names
+the check that failed rather than saying only "not ready".
 
 `/metrics` serves Prometheus text: ingest counts and durations, dead letters,
 materialized edges per tenant, recompute time by mode, findings by rule and
 severity, and HTTP latency. Request metrics are labeled with the *route
 template*, not the path, so a tenant with 10,000 principals produces one time
-series instead of 10,000 — the cardinality mistake that eventually takes a
-Prometheus instance down. The registry itself is hand-written in
+series instead of 10,000, which is the cardinality mistake that eventually
+takes a Prometheus instance down. The registry itself is hand-written in
 [observability.py](src/reachset/observability.py): counters, gauges, and
-cumulative histograms with labels, and deliberately nothing else — no
-exemplars, no native histograms, no multiprocess collection. Taking
-`prometheus_client` instead would have been perfectly defensible; I wrote it
-because the exposition format is small enough to own and I wanted the label
-and bucket semantics under test. The call sites are shaped so the library
-drops in unchanged the day any of those missing features matter.
+cumulative histograms with labels, deliberately nothing else. No exemplars, no
+native histograms, no multiprocess collection. Taking `prometheus_client`
+instead would have been perfectly defensible; I wrote it because the
+exposition format is small enough to own and I wanted the label and bucket
+semantics under test. The call sites are shaped so the library drops in
+unchanged the day any of those missing features matter.
 
 ## Benchmarks
 
@@ -320,26 +320,27 @@ single-origin queries per row):
 Peak process RSS was **126.5 MB**, down from 4.3 GB in the previous run of
 this same benchmark. That drop is `materialize()` streaming the CTE's result
 through a server-side cursor in bounded chunks instead of buffering the whole
-2M-row result set in Python first — the fix flagged as "obvious next" in the
-previous version of this table, now landed (`reach/engine.py::_stream_materialize`).
+2M-row result set in Python first. That's the fix flagged as "obvious next" in
+the previous version of this table, now landed
+(`reach/engine.py::_stream_materialize`).
 
 The largest full-recompute figure also dropped, from 154.8 s to 94.4 s (about
-39%), and single-origin p50/p95 both improved at every scale — the exact/glob
-selector split (below) reduces the cost of the reachability query itself, not
-just its memory profile. p99 at the largest scale is noisy (266 ms here vs.
-543 ms previously — both are one-run numbers, not averages, so read the
-overall direction rather than the single figure).
+39%), and single-origin p50/p95 both improved at every scale, because the
+exact/glob selector split (below) reduces the cost of the reachability query
+itself, not just its memory profile. p99 at the largest scale is noisy (266 ms
+here vs. 543 ms previously; both are one-run numbers, not averages, so read
+the overall direction rather than the single figure).
 
 Two things in that table are worth reading carefully rather than skimming.
-Incremental recompute only beats a full pass once tenants get large — at the
+Incremental recompute only beats a full pass once tenants get large: at the
 smallest scale, looping 50 single-origin queries costs more than one set-based
-sweep, which is why the CLI does not quietly "optimize" small tenants into the
+sweep, which is why the CLI doesn't quietly "optimize" small tenants into the
 incremental path. And the largest row has moved twice now during this
-project's life: before the `hops` CTE was marked `MATERIALIZED`, the same
+project's life. Before the `hops` CTE was marked `MATERIALIZED`, the same
 benchmark reported 341 s and a p50 of 1,529 ms; after that fix it was 154.8 s;
 after streaming materialization and the exact/glob selector split (which
-eliminates the impersonation arm's cross join for every selector that isn't
-an actual glob — see [NOTES.md](NOTES.md), "Reach engine performance") it's
+eliminates the impersonation arm's cross join for every selector that isn't an
+actual glob, see [NOTES.md](NOTES.md), "Reach engine performance") it's
 94.4 s. Reading the query plan was worth more than any amount of guessing
 about it each time.
 
@@ -370,7 +371,7 @@ fixture, each emitting the exact rows and derivation paths that triggered it:
 
 MCP tools return conclusions, not rows: `assess_principal` gives a reach
 summary, top risks, and bounded evidence references, never a 4,000-edge dump.
-On top of that sits a three-role triage pipeline — an Analyst drafts the case,
+On top of that sits a three-role triage pipeline: an Analyst drafts the case,
 an Adversary hunts for benign explanations (cron-shaped activity, declared
 migration windows, by-design accounts, audit-corroborated changes), and an
 Adjudicator decides from structured fields only.
@@ -392,8 +393,8 @@ rules, are in [bench/triage_eval.json](bench/triage_eval.json).
 The roles are deterministic heuristics in v0 (no model API is called anywhere
 in this repo), so "cost" counts simulated tool invocations rather than tokens.
 The interfaces are shaped for a model-backed Analyst/Adversary to drop in
-later; the Adjudicator boundary — numbers and enums in, no app-originated text
-— is what makes the next paragraph hold either way.
+later; the Adjudicator boundary (numbers and enums in, no app-originated text)
+is what makes the next paragraph hold either way.
 
 **Prompt-injection defense.** Audit logs carry attacker-controlled strings
 (app display names, repo descriptions, Vault path names) that reach agent
@@ -403,9 +404,8 @@ the Adjudicator never sees raw strings at all. A red-team corpus of 26
 poisoned records (instruction injection, fake system messages, base64
 payloads, spoofed tool calls, "a previous session authorized this") is in
 [tests/redteam/](tests/redteam/); the suite asserts **0/26 change a verdict**,
-in both directions — an injection can't talk an alert down, and it can't talk
-a benign dismissal up. Suspected injections only ever escalate to human
-review.
+in both directions: an injection can't talk an alert down, and it can't talk a
+benign dismissal up. Suspected injections only ever escalate to human review.
 
 ## Verification status
 
@@ -413,8 +413,8 @@ Being precise about what has actually been verified against what:
 
 - **Verified end-to-end against a live service:** the Vault connector, and the
   pipeline behind it (ingest → normalize → reach → detections → API). The
-  integration tests arrange a real `vault server -dev` — policies, tokens, KV
-  writes, a file audit device — and run the actual connector against it, in CI
+  integration tests arrange a real `vault server -dev` (policies, tokens, KV
+  writes, a file audit device) and run the actual connector against it, in CI
   on every push.
 - **Verified against fixtures only:** the GitHub connector. Fixtures are
   hand-authored from the public REST API documentation, not captured from a
@@ -436,7 +436,7 @@ Being precise about what has actually been verified against what:
   the audit file; only the direct connector path does); metrics under more
   than one API replica (they are per-process and in-memory, so each replica
   must be scraped separately); `RedisBucketRegistry` wired into the actual
-  worker sync path (`StreamSyncer` — the class it plugs into — isn't called
+  worker sync path (`StreamSyncer`, the class it plugs into, isn't called
   anywhere in the worker yet; see NOTES.md).
 
 [NOTES.md](NOTES.md) is the full running list of unconfirmed assumptions, kept
@@ -475,29 +475,30 @@ gate is set at 99% rather than 100% deliberately: the reachability property test
 generates a fresh random graph set every run, and about one run in ten leaves a
 single data-dependent branch unexercised. Pinning the seed would make the gate
 exact and would also stop the test exploring new graphs, which is the whole
-reason it exists — so the randomness stays and the floor gives way by a point.
+reason it exists, so the randomness stays and the floor gives way by a point.
+
 Seven `# pragma: no cover` markers exist: four on `Protocol` class/method
 bodies that structurally never execute (`Transport`, `Detection`, and the two
 methods of the rate limiter's `Bucket`/`BucketSource` protocols), and three on
-lines that are genuinely untestable rather than merely inconvenient —
+lines that are genuinely untestable rather than merely inconvenient:
 interactive-only `KeyboardInterrupt` handling, the `if __name__ ==
 "__main__"` entry point, and a FastAPI dependency the test fixture always
 overrides. (An earlier draft of this file claimed "three, all on Protocol
-bodies" — untrue even before this round of changes, since the three
-non-Protocol ones already existed; a grep-and-count pass during this polish
-found the discrepancy.) Everything else is covered by a test rather than
-excused.
+bodies." That was untrue even before this round of changes, since the three
+non-Protocol ones already existed; a grep-and-count pass during a polish
+session found the discrepancy.) Everything else is covered by a test rather
+than excused.
 
 Coverage is configured with `concurrency = ["thread", "greenlet"]`, without
 which every endpoint that resolves a database session through a FastAPI
-dependency reports as uncovered despite being exercised — that measurement bug
+dependency reports as uncovered despite being exercised. That measurement bug
 was understating the project by about five points until I chased down why
 tested endpoints were showing red.
 
 The single most important test in the repo is the Hypothesis property test
-asserting the reachability CTE agrees exactly with a naive Python BFS on random
-graphs — see
-[tests/integration/test_reach_property.py](tests/integration/test_reach_property.py).
+asserting the reachability CTE agrees exactly with a naive Python BFS on
+random graphs (see
+[tests/integration/test_reach_property.py](tests/integration/test_reach_property.py)).
 It has now caught two real bugs: a recursive CTE shape Postgres rejects, and a
 `%` escaping error that made selectors containing LIKE metacharacters match
 paths they shouldn't. Both times a mutation check confirmed the test fails when

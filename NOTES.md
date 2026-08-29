@@ -19,7 +19,7 @@ or fix the code.
   anchored POSIX ERE via `~` in the CTE) instead of widening `+` to `*`. The
   Vault extractor stores a policy's `+` selector verbatim
   (`connectors/vault/extractor.py`). Verified by extending the CTE-vs-BFS
-  property test's selector generator to draw `+` patterns — see
+  property test's selector generator to draw `+` patterns; see
   `reach/selectors.py` and "Reach engine performance" below for the SQL side.
 - [x] The `root` policy has no document. I synthesize it as sudo-over-`*`.
   Verified live: root tokens list it and no document endpoint exists for it.
@@ -30,7 +30,7 @@ or fix the code.
   uses which format per Vault version.
 - [x] Audit device: file backend, `mode=0644`, and `hmac_accessor=false` so the
   test can correlate audit lines to token accessors. A production deployment
-  should keep the HMAC and correlate through `entity_id` instead — accessors in
+  should keep the HMAC and correlate through `entity_id` instead; accessors in
   plaintext in an audit log are a secondary credential-ish artifact.
 - [ ] Only `type == "response"` audit entries become events (the request entry
   would double-count every operation). Assumes every completed operation writes
@@ -46,7 +46,7 @@ or fix the code.
 - [ ] The connector never reads Vault entity metadata (`identity/entity/id/...`),
   only token-accessor lookups (`extract_token` in
   `connectors/vault/extractor.py`). Vault entities carry an `email` in their
-  metadata in a real deployment, and identity linking depends on it — the
+  metadata in a real deployment, and identity linking depends on it. The
   README's "why can jortega read a Vault secret" worked example demonstrates
   the resulting cross-app link, but has to seed a Vault entity by hand in the
   test that produces it, because no committed Vault fixture has an email at
@@ -55,7 +55,7 @@ or fix the code.
   getting "no read edge" instead of the documented output. Reading entities
   is the fix; it's a new Vault API call this connector doesn't make yet.
 
-## GitHub (fixture-verified only — no live tenant exists)
+## GitHub (fixture-verified only, no live tenant exists)
 
 All GitHub shapes were hand-authored from the public REST docs. None of this
 has met a real org.
@@ -85,14 +85,14 @@ has met a real org.
 
 ## Canonical schema decisions (deviations worth knowing)
 
-- Credentials are idempotent on `(tenant_id, kind, external_id)` — they carry
+- Credentials are idempotent on `(tenant_id, kind, external_id)`. They carry
   no `app_id`, unlike the other tables. A Vault accessor or PAT id is unique
   within its kind. If two apps ever emit colliding external ids for the same
   credential kind, this breaks; I took the narrower key on purpose to keep
   cross-referencing simple.
 - Grants have no upstream id in most APIs, so idempotency is a SHA-256 dedupe
   key over (principal, credential, selector, scope, source app). Capabilities
-  are deliberately *excluded* so a widened grant updates the same row — that
+  are deliberately *excluded* so a widened grant updates the same row. That
   update is what emits the inferred `reachset.grant_widened` event the
   scope-expansion detection feeds on.
 - Events are idempotent on `(tenant, app, raw_ref)` where raw_ref is a content
@@ -136,13 +136,13 @@ Profiled with `EXPLAIN (ANALYZE, BUFFERS)` on a synthetic 5,000-principal /
   inside the recursive term, so Postgres inlined it by default and re-derived
   the entire relation on every iteration of the walk. Adding the keyword cut
   median single-origin latency from ~3,456 ms to ~2,434 ms (about 30%) with no
-  semantic change — the property test was re-run against random seeds to
+  semantic change; the property test was re-run against random seeds to
   confirm that.
 - [x] The previous bottleneck was the impersonation arm of `hops`: it was a
   cross join of every impersonation grant against every principal in the
   tenant, with a five-deep `replace()` + `LIKE` evaluated per pair. On the
   profiled tenant that was 179 grants × 5,000 principals ≈ 895k comparisons,
-  with 894,821 rows discarded by the join filter — the single most expensive
+  with 894,821 rows discarded by the join filter, the single most expensive
   node in the plan. Fixed by splitting that arm (and the resource-selector
   grant join, same shape) into an exact-match arm and a glob-match arm:
   selectors with none of `*`/`?`/`+` join by equality against an index on
@@ -153,10 +153,10 @@ Profiled with `EXPLAIN (ANALYZE, BUFFERS)` on a synthetic 5,000-principal /
   and `reach/selectors.py::sql_glob_to_ere`.
 
   I had previously prototyped this exact split and reported here that it
-  "did not converge in a reasonable time" — that was true of the earlier
+  "did not converge in a reasonable time." That was true of the earlier
   attempt, not of this one. Measured with `EXPLAIN (ANALYZE, BUFFERS)` on
   the same synthetic 5,000-principal/20,000-grant shape (`ANALYZE`d after
-  generation — a freshly bulk-loaded table has no statistics until
+  generation, since a freshly bulk-loaded table has no statistics until
   autovacuum catches up, and querying it before that gives the planner
   wildly wrong row estimates on *both* the old and new query, which hides
   the real delta rather than measuring it): single-origin query time dropped
@@ -169,16 +169,16 @@ Profiled with `EXPLAIN (ANALYZE, BUFFERS)` on a synthetic 5,000-principal /
   best case constructed to flatter the fix.
 - [ ] `DISTINCT ON ... ORDER BY ... path::text` sorts on the serialized
   derivation to break ties deterministically. On the largest tenant that spills
-  to disk (`external merge`, ~11 MB). A cheaper deterministic tie-break — the
-  grant id rather than the whole path — would avoid it, at the cost of a
+  to disk (`external merge`, ~11 MB). A cheaper deterministic tie-break, the
+  grant id rather than the whole path, would avoid it, at the cost of a
   slightly less obvious "shortest, then smallest path" rule.
 - [x] Full materialization used to buffer the entire result set as
-  `ReachRow` objects in Python before a single bulk insert — the reason peak
-  RSS hit 4.3 GB on the 2M-edge benchmark tenant. `materialize()` now streams
-  the CTE's result through `session.stream(...).partitions(...)` (a
+  `ReachRow` objects in Python before a single bulk insert. That's the reason
+  peak RSS hit 4.3 GB on the 2M-edge benchmark tenant. `materialize()` now
+  streams the CTE's result through `session.stream(...).partitions(...)` (a
   server-side cursor) and inserts each bounded-size chunk before fetching the
   next one, so process memory no longer scales with tenant size. `compute_reach()`
-  itself is unchanged and still buffers — it's used for single-origin queries
+  itself is unchanged and still buffers; it's used for single-origin queries
   (blast radius, what-if revocation), which are bounded by one principal's
   reach and don't have this problem. Re-run `make bench` after this change and
   update the RSS figure in README with the measured number, not this note.
@@ -197,14 +197,14 @@ Profiled with `EXPLAIN (ANALYZE, BUFFERS)` on a synthetic 5,000-principal /
   `events.target_resource_id`. Postgres does not index foreign keys
   automatically, so every cascade or `SET NULL` check on a parent delete was a
   sequential scan of the child table. I found this when `make bench`'s own
-  cleanup — deleting a few thousand synthetic principals — ran for twenty
+  cleanup (deleting a few thousand synthetic principals) ran for twenty
   minutes against a two-million-row `reach_edges`. Migration
   `171cb07e2ed3` adds all five. Measured on a clean database, deleting 600
   principals with ~30k edges went from 0.45 s to 0.02 s; the gap widens with
   table size, because the unindexed version is linear in the child table per
   deleted row.
   A `pg_constraint`/`pg_index` query for uncovered foreign keys is worth
-  keeping around — it is in the git history of this file if it is needed again.
+  keeping around. It is in the git history of this file if it is needed again.
 
 ## Detections
 
@@ -220,10 +220,10 @@ Profiled with `EXPLAIN (ANALYZE, BUFFERS)` on a synthetic 5,000-principal /
 ## Agent layer
 
 - Analyst/Adversary/Adjudicator are deterministic heuristics behind role-shaped
-  interfaces. There is no LLM call anywhere in this repo (a hard constraint —
+  interfaces. There is no LLM call anywhere in this repo (a hard constraint:
   no live API credentials exist). The interfaces are the point: a model-backed
   Analyst can replace the heuristic one without touching the safety property,
-  because the Adjudicator consumes only `AdjudicatorInput` — numbers and enums,
+  because the Adjudicator consumes only `AdjudicatorInput`, numbers and enums,
   no app-originated text. Eval "cost units" are simulated tool invocations, not
   tokens, and the README table says so.
 - `looks_injected` is a best-effort pattern list. The 0/26 injection result
@@ -266,13 +266,13 @@ Profiled with `EXPLAIN (ANALYZE, BUFFERS)` on a synthetic 5,000-principal /
   - [ ] The example config's two rules (`examples/invariants.toml`) are
     exercised end-to-end against the GitHub fixtures in tests, but no SARIF
     output from this tool has ever actually been uploaded to GitHub code
-    scanning and confirmed to render as a check — the SARIF shape follows the
+    scanning and confirmed to render as a check. The SARIF shape follows the
     spec and points `physicalLocation` at the config file (the same
     convention other non-code SARIF producers use when they have no line to
     report), but "GitHub actually ingests it and shows results" is unverified.
   - [ ] Severity is constrained to SARIF's own three levels (`error`/
     `warning`/`note`) rather than a separate severity vocabulary translated
-    through — simpler, but it means a rules file authored before knowing
+    through. Simpler, but it means a rules file authored before knowing
     about SARIF would need updating if this project ever added a fourth
     internal severity tier.
 
@@ -283,7 +283,7 @@ Profiled with `EXPLAIN (ANALYZE, BUFFERS)` on a synthetic 5,000-principal /
   `RedisBucketRegistry` (new). The bug the new one fixes: N worker processes
   each holding their own `BucketRegistry` get N independent allowances, so N
   workers racing the same tenant/app draw N times the configured rate against
-  whatever they're calling — nothing enforces the *aggregate* rate across
+  whatever they're calling. Nothing enforces the *aggregate* rate across
   processes when the state lives in one process's memory.
 - The Redis version refills and decrements atomically in one Lua script per
   `acquire()` call, keyed on Redis's own `TIME` command rather than each
@@ -291,23 +291,23 @@ Profiled with `EXPLAIN (ANALYZE, BUFFERS)` on a synthetic 5,000-principal /
   timing. Verified with a real concurrency test
   (`tests/integration/test_distributed_ratelimit.py`) against a real Redis:
   N independent `RedisBucketRegistry` instances (standing in for N worker
-  processes — no shared Python object between them, only the same Redis key)
+  processes, no shared Python object between them, only the same Redis key)
   race the same bucket, and the test asserts the *aggregate* acquisition rate
   across all of them tracks the single configured rate rather than N times it.
-  This needed real wall-clock time and real concurrency to be honest — a fake
+  This needed real wall-clock time and real concurrency to be honest; a fake
   clock in a single-process unit test can't exercise the actual race the bug
   lives in.
 - [ ] **Not wired into anything yet.** `StreamSyncer` (`ingest/engine.py`) is
   what actually takes a `BucketSource`, and nothing in this repo constructs a
-  `StreamSyncer` outside of tests — the worker's Vault sync
+  `StreamSyncer` outside of tests. The worker's Vault sync
   (`ingest/worker.py::vault_syncer`) calls `VaultConnector(transport).sync()`
   directly, no rate limiting of any kind, local or distributed. This was true
   before this change too (found while looking for where to wire the Redis
-  registry in) — GitHub live mode, which is what `StreamSyncer` was actually
+  registry in). GitHub live mode, which is what `StreamSyncer` was actually
   built for, was never implemented (see "Not implemented" below), so the
   class it serves has stayed unused. Whoever implements live-mode GitHub sync
   should default to `RedisBucketRegistry`, not `BucketRegistry`, once a
-  worker fleet exists — that is the whole point of building it now rather
+  worker fleet exists; that is the whole point of building it now rather
   than later.
 
 ## Attack-path visualization
@@ -315,13 +315,13 @@ Profiled with `EXPLAIN (ANALYZE, BUFFERS)` on a synthetic 5,000-principal /
 - `reach/graphs.py` renders a single derivation path (`explain --format
   mermaid|dot`) or a principal's whole reach (`reach --format mermaid|dot`)
   as Mermaid or DOT. Pure string formatting over data the engine and CLI
-  already produce — no new query, and rendering can't disagree with the table
+  already produce: no new query, and rendering can't disagree with the table
   it's an alternate view of, because it consumes the same rows.
 - The whole-reach renderer deliberately does *not* draw one subgraph per
   distinct derivation path. At real tenant scale (thousands of edges) that
   would be an unreadable tangle rather than something worth pasting into an
   incident doc. It fans out from the origin to each resource once, grouped by
-  app, edge labeled with the deduplicated capability set — "what does this
+  app, edge labeled with the deduplicated capability set: "what does this
   identity touch," which is what `reach` already reports, just as a picture.
   "How does this *one* edge derive" is `explain`'s job, and that renderer
   does draw every hop, because a single path is never too large to read.
@@ -336,7 +336,7 @@ Profiled with `EXPLAIN (ANALYZE, BUFFERS)` on a synthetic 5,000-principal /
 ## Operational surface
 
 - [ ] `/readyz` checks Postgres only. Redis is not checked, because the API
-  does not use it — the worker does. If the API ever grows a queue dependency,
+  does not use it; the worker does. If the API ever grows a queue dependency,
   that check needs adding or the probe becomes a lie.
 - The metrics registry is hand-written (~297 lines). It implements counters,
   gauges, and cumulative histograms in the Prometheus text format, and nothing
@@ -351,11 +351,11 @@ Profiled with `EXPLAIN (ANALYZE, BUFFERS)` on a synthetic 5,000-principal /
 
 - Google Workspace and Salesforce connectors (stretch goals; never started).
 - Live-mode GitHub transport (Link-header pagination adapter, app JWT auth).
-- `RedisBucketRegistry` wired into a live sync path — it exists and is
+- `RedisBucketRegistry` wired into a live sync path. It exists and is
   tested, but `StreamSyncer` (the only thing that takes a `BucketSource`)
   is never constructed outside tests, because live-mode GitHub sync (above)
   was never implemented either. See "Distributed rate limiting".
-- Vault entity metadata (email, etc.) — the connector only reads token
+- Vault entity metadata (email, etc.). The connector only reads token
   accessors. See the Vault section above.
 - `TransportBase.request` raises NotImplementedError by design (abstract).
 
@@ -365,19 +365,19 @@ There are currently no `xfail` tests and no silently stubbed functions.
 
 - Coverage is measured with `concurrency = ["thread", "greenlet"]`. Without it,
   every API endpoint that resolves a SQLAlchemy session through a FastAPI
-  dependency reports as uncovered even though the tests exercise it — the
-  execution happens inside a greenlet coverage was not tracing. That silently
-  understated the whole project's coverage by about five points until I went
-  looking for why tested endpoints showed red.
+  dependency reports as uncovered even though the tests exercise it, because
+  the execution happens inside a greenlet coverage was not tracing. That
+  silently understated the whole project's coverage by about five points
+  until I went looking for why tested endpoints showed red.
 - Seven `# pragma: no cover` markers exist: four on `Protocol` class/method
   bodies (`Transport`, `Detection`, and the rate limiter's `Bucket.acquire`
   and `BucketSource.bucket`), which are structural declarations never
-  executed, and three on genuinely untestable lines — interactive-only
+  executed, and three on genuinely untestable lines: interactive-only
   `KeyboardInterrupt` handling in the CLI, the `if __name__ == "__main__"`
   entry point, and a FastAPI dependency the test fixture always overrides.
   This file used to claim "three, all on Protocol bodies," which was already
-  wrong before this round of work (the three non-Protocol ones predate it) —
-  found by grepping and counting during a polish pass rather than trusting
+  wrong before this round of work (the three non-Protocol ones predate it).
+  Found by grepping and counting during a polish pass rather than trusting
   the existing claim. Everything else is covered by a test rather than
   excused by a pragma.
 - The suite reaches 100% of lines and branches on a typical run, but the
@@ -385,7 +385,7 @@ There are currently no `xfail` tests and no silently stubbed functions.
   and roughly one run in ten misses a single data-dependent branch. I chased it
   across a dozen runs without pinning it down to one line, and decided a gate
   that fails at random is worse than a gate with a point of slack. The
-  alternative — `derandomize=True` on the Hypothesis profile — would make
+  alternative, `derandomize=True` on the Hypothesis profile, would make
   coverage exact at the cost of the test only ever seeing the same graphs,
   which defeats its purpose.
 - [ ] If that branch is ever identified, cover it deterministically and put the
@@ -395,12 +395,12 @@ There are currently no `xfail` tests and no silently stubbed functions.
 
 - If the repo lives in an iCloud-synced folder (Desktop/Documents), iCloud can
   set the macOS `hidden` flag on files inside `.venv`, and Python ≥3.11 skips
-  hidden `.pth` files — imports of the editable install then fail with
+  hidden `.pth` files, so imports of the editable install then fail with
   `ModuleNotFoundError`. Fix: `chflags -R nohidden .venv`, or keep the venv
   outside the synced tree (`UV_PROJECT_ENVIRONMENT=~/.venvs/reachset`).
 - `make test` points tests at the compose stack from `make up` (same shape as
   CI's service containers). Unset the `REACHSET_TEST_*` variables to let
   testcontainers manage throwaway containers instead.
 - Don't run `make bench` and the test suite at the same time against the same
-  database — the test fixtures truncate tables and will eat the benchmark's
+  database. The test fixtures truncate tables and will eat the benchmark's
   tenants mid-run. I did this once so you don't have to.
