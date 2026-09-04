@@ -118,6 +118,27 @@ has met a real org.
   expand reach across apps; `fuzzy_name` links never do. Fuzzy links only exist
   for review, and if you ask the engine to include them (`include_fuzzy=True`)
   the path confidence is capped at 0.6 and nothing is materialized from them.
+- [ ] `normalize_email` strips a `+tag` unconditionally, on every domain, but
+  only folds dots on the two Gmail domains (`linking/linker.py`). That's
+  inconsistent on purpose right now, not an oversight I've fixed: dot-folding
+  is a Gmail-specific quirk, but plus-addressing is close enough to universal
+  (every major consumer and Workspace/365 provider supports it) that gating it
+  the same way would silently miss the common case. The cost is a real one
+  though: on a domain where `+` is a literal character rather than an alias
+  separator, this produces a false `email_exact` match at 0.95 confidence,
+  which is deterministic and therefore trusted unconditionally by
+  `materialize()`, unlike a fuzzy match. A per-domain allowlist (or a "treat
+  plus as literal unless the domain is known to support sub-addressing"
+  default) is the fix if this ever ingests a real tenant; not built because
+  every domain in the fixtures and the synthetic generator does support it,
+  so there's no test that would catch the regression either way.
+- Deterministic matches (external_id_exact, email_exact, sso_subject) have no
+  secondary check before they expand reach. A well-formed but wrong match
+  (two people sharing a recycled `external_id`, the plus-address case above)
+  is trusted exactly as much as a real one; only `fuzzy_name` gets the
+  review-only treatment. Requiring two independent deterministic signals to
+  agree before a link expands reach would close this, at the cost of missing
+  legitimate single-signal links.
 - Confidence is multiplicative along a path; grant hops are 1.0; only the best
   (confidence, then shortest, then lexicographic) path per
   (principal, resource, capability) is materialized.
@@ -251,6 +272,17 @@ Profiled with `EXPLAIN (ANALYZE, BUFFERS)` on a synthetic 5,000-principal /
 - **What-if revocation** recomputes with grants suppressed rather than deleting
   and rolling back. It is read-only by construction, and there is a test that
   asserts the row counts are unchanged afterwards.
+- [ ] `simulate_revocation` calls `compute_reach()` twice (before/after) with no
+  origin, which computes reach for every principal in the tenant, and
+  `compute_reach()` buffers its whole result set in Python. The CLI's
+  `simulate-revoke` subcommand never passes a principal, so every real
+  invocation is exactly the unbounded, unstreamed case that `materialize()`
+  was rewritten to stream away from (see "Reach engine performance" above,
+  the 4.8 GB RSS this project used to see before that fix). This is a real
+  gap, not just a documentation one: it contradicts the assumption stated
+  elsewhere that single-origin operations are bounded by one principal's
+  reach. Fix is the same one `materialize()` already got, a streaming path
+  through `simulate_revocation`; not done yet.
 - [ ] Snapshots store a full copy of the edge set. At the 2M-edge scale in the
   benchmark table that is a lot of rows per snapshot; retention/pruning is not
   implemented, and `reachset snapshot` will happily fill a disk if you run it

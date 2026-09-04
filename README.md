@@ -317,32 +317,40 @@ single-origin queries per row):
 | 1,500 / 6,000 | 198,998 | 7.0 s | 0.7 s | 4 ms | 15 ms | 59 ms |
 | 5,000 / 20,000 | 2,069,138 | 94.4 s | 2.7 s | 6 ms | 26 ms | 266 ms |
 
-Peak process RSS was **126.5 MB**, down from 4.3 GB in the previous run of
-this same benchmark. That drop is `materialize()` streaming the CTE's result
-through a server-side cursor in bounded chunks instead of buffering the whole
-2M-row result set in Python first. That's the fix flagged as "obvious next" in
-the previous version of this table, now landed
+Peak process RSS was **126.5 MB**, down from roughly 4.8 GB in the previous
+run of this same benchmark (the earlier figure was 4945.2 MB; both numbers are
+single runs, not averages). That drop is `materialize()` streaming the CTE's
+result through a server-side cursor in bounded chunks instead of buffering the
+whole 2M-row result set in Python first. That's the fix flagged as "obvious
+next" in the previous version of this table, now landed
 (`reach/engine.py::_stream_materialize`).
 
-The largest full-recompute figure also dropped, from 154.8 s to 94.4 s (about
-39%), and single-origin p50/p95 both improved at every scale, because the
-exact/glob selector split (below) reduces the cost of the reachability query
-itself, not just its memory profile. p99 at the largest scale is noisy (266 ms
-here vs. 543 ms previously; both are one-run numbers, not averages, so read
-the overall direction rather than the single figure).
+The largest full-recompute figure also dropped, from 112.8 s to 94.4 s, and
+single-origin p50/p95 both improved at every scale, because the exact/glob
+selector split (below) reduces the cost of the reachability query itself, not
+just its memory profile. p99 at the largest scale is noisy (266 ms here vs.
+543 ms previously; both are one-run numbers, not averages, so read the overall
+direction rather than the single figure). Full recompute and RSS are one-run
+figures too, same caveat, not just p99.
 
 Two things in that table are worth reading carefully rather than skimming.
-Incremental recompute only beats a full pass once tenants get large: at the
-smallest scale, looping 50 single-origin queries costs more than one set-based
-sweep, which is why the CLI doesn't quietly "optimize" small tenants into the
-incremental path. And the largest row has moved twice now during this
-project's life. Before the `hops` CTE was marked `MATERIALIZED`, the same
-benchmark reported 341 s and a p50 of 1,529 ms; after that fix it was 154.8 s;
-after streaming materialization and the exact/glob selector split (which
-eliminates the impersonation arm's cross join for every selector that isn't an
-actual glob, see [NOTES.md](NOTES.md), "Reach engine performance") it's
-94.4 s. Reading the query plan was worth more than any amount of guessing
-about it each time.
+First, the incremental-vs-full crossover moved: at the current scale profile,
+incremental already wins even at the smallest tenant shown (0.5 s vs. 1.0 s),
+which wasn't true before the selector split, so the CLI still doesn't force
+the incremental path onto small tenants, the crossover is just lower than it
+used to be, not gone. Second, the largest row has moved twice now during this
+project's life, but I can only give you a clean before/after for the first
+move: before the `hops` CTE was marked `MATERIALIZED`, the same benchmark
+reported 112.8 s (that's the number in `bench/results.json`'s history, from
+the first version of this table). The `MATERIALIZED` fix, the streaming
+materialization, and the exact/glob selector split (which eliminates the
+impersonation arm's cross join for every selector that isn't an actual glob,
+see [NOTES.md](NOTES.md), "Reach engine performance") all landed together in
+one commit, so I don't have an isolated before/after for each of the three. I
+logged an intermediate number partway through that work but never committed
+the `results.json` snapshot that would make it independently reproducible, so
+I'm not citing it here. Reading the query plan was worth more than any amount
+of guessing about it each time, even without a clean per-change breakdown.
 
 Numbers are measured, not targeted. Every figure above is reproducible with
 `BENCH_SCALE=medium make bench` and comes from
@@ -438,6 +446,13 @@ Being precise about what has actually been verified against what:
   must be scraped separately); `RedisBucketRegistry` wired into the actual
   worker sync path (`StreamSyncer`, the class it plugs into, isn't called
   anywhere in the worker yet; see NOTES.md).
+- **Not built at all:** authentication and authorization on the API and MCP
+  server. Every tenant-scoped query is correctly filtered by `tenant_id` once
+  it reaches the database, but nothing upstream of that verifies a caller is
+  entitled to the `tenant_id` it supplies; it's a bare path/argument. This is
+  a computation engine and CLI, not a deployed multi-tenant service, so it
+  hasn't needed one yet, but it's the first thing I'd build before this ran
+  anywhere reachable by more than one tenant's own operators.
 
 [NOTES.md](NOTES.md) is the full running list of unconfirmed assumptions, kept
 as a checklist so they can be turned into verified facts or fixes.
